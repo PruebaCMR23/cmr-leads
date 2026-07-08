@@ -77,7 +77,7 @@ function subscribeToLeadsRealtime() {
 
 // ─── AUTENTICACIÓN LOCAL ──────────────────────────────────────────────────────
 function handleLogin(e) {
-  e.preventDefault();
+  if(e) e.preventDefault();
   const userVal = document.getElementById('username').value.trim();
   const passVal = document.getElementById('password').value;
 
@@ -103,6 +103,7 @@ function handleLogout() {
   window.location.reload();
 }
 
+// Exclusión de términos médicos/terapéuticos en auditoría simple de cumplimiento publicitario
 function checkPasswordPrompt(actionName) {
   const role = sessionStorage.getItem('crm_user_role');
   if (role === 'Primary') return true; 
@@ -196,10 +197,11 @@ function renderKanbanContent(list) {
 
     const card = document.createElement('div');
     card.className = `kanban-card border-start border-4 ${getPriorityBorderClass(lead.prioridad)}`;
+    card.style = "background: #fdfdfd; padding: 10px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid;";
     card.innerHTML = `
       <div class="d-flex justify-content-between align-items-start mb-1">
-        <h6 class="mb-0 text-truncate" style="max-width: 80%;">${lead.nombre}</h6>
-        <span class="priority-dot bg-${getPriorityColor(lead.prioridad)}" title="Prioridad ${lead.prioridad}"></span>
+        <h6 class="mb-0 text-truncate" style="max-width: 80%; margin:0;">${lead.nombre}</h6>
+        <span class="priority-dot bg-${getPriorityColor(lead.prioridad)}" title="Prioridad ${lead.prioridad}" style="display:inline-block; width:8px; height:8px; border-radius:50%;"></span>
       </div>
       <div class="text-muted small text-truncate mb-2">${lead.empresa || 'Sin empresa'}</div>
       <div class="d-flex justify-content-between align-items-center small mt-2">
@@ -270,9 +272,7 @@ async function handleLeadFormSubmit(e) {
     }
 
     // Cerrar Modal y Resetear Formulario
-    const modalEl = document.getElementById('leadModal');
-    const modalObj = bootstrap.Modal.getInstance(modalEl);
-    if (modalObj) modalObj.hide();
+    closeLeadModal();
     document.getElementById('lead-form').reset();
     currentEditId = null;
 
@@ -315,6 +315,9 @@ function openEditLeadModal(id) {
   document.getElementById('lead-correo').value = lead.correo || '';
   document.getElementById('lead-ciudad').value = lead.ciudad || '';
   document.getElementById('lead-estado-geo').value = lead.estado_geo || '';
+  
+  populateSelectOptions(); // Refrescar catálogos activos primero
+
   document.getElementById('lead-fuente').value = lead.fuente || '';
   document.getElementById('lead-producto').value = lead.producto || '';
   document.getElementById('lead-presupuesto').value = lead.presupuestos || '';
@@ -328,31 +331,27 @@ function openEditLeadModal(id) {
   document.getElementById('lead-notas-ventas').value = lead.notasventas || '';
   document.getElementById('lead-notas-gerencia').value = lead.notasgerencia || '';
 
-  const modalEl = document.getElementById('leadModal');
-  const modalObj = new bootstrap.Modal(modalEl);
-  modalObj.show();
+  document.getElementById('leadModal').style.display = 'flex';
 }
 
 function openCreateLeadModal() {
   currentEditId = null;
   document.getElementById('leadModalLabel').innerText = 'Nuevo Lead';
   document.getElementById('lead-form').reset();
-  
-  const modalEl = document.getElementById('leadModal');
-  const modalObj = new bootstrap.Modal(modalEl);
-  modalObj.show();
+  populateSelectOptions();
+  document.getElementById('leadModal').style.display = 'flex';
 }
 
 // ─── CLASES AUXILIARES Y ESTILOS ──────────────────────────────────────────────
 function getStatusBadgeClass(status) {
   switch (status) {
-    case 'Nuevo': return 'bg-info text-dark';
-    case 'En Seguimiento': return 'bg-primary';
-    case 'Demostración / Muestra': return 'bg-warning text-dark';
-    case 'Negociación': return 'bg-dark text-light';
-    case 'Cerrado Ganado': return 'bg-success';
-    case 'Cerrado Perdido': return 'bg-danger';
-    default: return 'bg-secondary';
+    case 'Nuevo': return 'badge bg-info text-dark';
+    case 'En Seguimiento': return 'badge bg-primary text-white';
+    case 'Demostración / Muestra': return 'badge bg-warning text-dark';
+    case 'Negociación': return 'badge bg-dark text-light';
+    case 'Cerrado Ganado': return 'badge bg-success text-white';
+    case 'Cerrado Perdido': return 'badge bg-danger text-white';
+    default: return 'badge bg-secondary text-white';
   }
 }
 
@@ -389,9 +388,9 @@ function setupFilterListeners() {
     });
   }
 
-  const selectEjecutivo = document.getElementById('filter-ejecutivo');
-  if (selectEjecutivo) {
-    selectEjecutivo.addEventListener('change', (e) => {
+  const selectExecutive = document.getElementById('filter-ejecutivo');
+  if (selectExecutive) {
+    selectExecutive.addEventListener('change', (e) => {
       filterEjecutivo = e.target.value;
       renderDashboard();
     });
@@ -442,17 +441,15 @@ function notify(message, type = 'primary') {
   const container = document.getElementById('notification-container') || document.body;
   const toast = document.createElement('div');
   toast.className = `alert alert-${type} alert-dismissible fade show shadow position-fixed bottom-0 end-0 m-3`;
-  toast.style.zIndex = '9999';
-  toast.style.minWidth = '250px';
+  toast.style = "z-index: 9999; min-width: 250px; background: #fff; padding: 15px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 5px solid #20c997;";
   toast.innerHTML = `
-    <div>${message}</div>
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>${message}</div>
+      <button type="button" style="border:none; background:transparent; font-size:16px; cursor:pointer;" onclick="this.parentElement.parentElement.remove()">×</button>
+    </div>
   `;
   container.appendChild(toast);
-  setTimeout(() => {
-    const bsAlert = bootstrap.Alert.getOrCreateInstance(toast);
-    if (bsAlert) bsAlert.close();
-  }, 3500);
+  setTimeout(() => { toast.remove(); }, 3500);
 }
 
 // ─── CONFIGURACIÓN LOCAL DE CATÁLOGOS (STORAGE) ──────────────────────────────
@@ -466,16 +463,15 @@ function saveConfigStorage() {
 }
 
 function renderConfig() {
-  // Render de listas editables en la pestaña de configuración
   const listAdmins = document.getElementById('cfg-list-admins');
   if (listAdmins) {
     listAdmins.innerHTML = '';
     ADMINS.forEach((adm, i) => {
-      listAdmins.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-person-lock"></i> <strong>${adm.user}</strong> (Adicional)</span>
+      listAdmins.innerHTML += `<li style="display:flex; justify-content:space-between; margin-bottom:5px;">
+        <span><strong>${adm.user}</strong> (Adicional)</span>
         <div>
-          <button class="btn btn-sm btn-outline-secondary me-1" onclick="startEditAdmin(${i})"><i class="bi bi-pencil"></i></button>
-          <button class="btn btn-sm btn-outline-danger" onclick="removeAdminUser(${i})"><i class="bi bi-trash"></i></button>
+          <button class="btn btn-sm" onclick="startEditAdmin(${i})">✏️</button>
+          <button class="btn btn-sm" onclick="removeAdminUser(${i})">🗑️</button>
         </div>
       </li>`;
     });
@@ -483,8 +479,6 @@ function renderConfig() {
 
   renderGenericConfigList('cfg-list-fuentes', FUENTES, 'FUENTES');
   renderGenericConfigList('cfg-list-productos', PRODUCTOS, 'PRODUCTOS');
-  renderGenericConfigList('cfg-list-presupuestos', PRESUPUESTOS, 'PRESUPUESTOS');
-  renderGenericConfigList('cfg-list-responsables', RESPONSABLES, 'RESPONSABLES');
   renderGenericConfigList('cfg-list-ejecutivos', EJECUTIVOS, 'EJECUTIVOS');
 
   populateSelectOptions();
@@ -495,9 +489,9 @@ function renderGenericConfigList(elementId, array, arrayName) {
   if (!listEl) return;
   listEl.innerHTML = '';
   array.forEach((item, index) => {
-    listEl.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+    listEl.innerHTML += `<li style="display:flex; justify-content:space-between; margin-bottom:3px;">
       <span>${item}</span>
-      <button class="btn btn-sm btn-outline-danger" onclick="removeConfigItem('${arrayName}', ${index})"><i class="bi bi-x-circle"></i></button>
+      <button style="border:none; background:transparent; cursor:pointer;" onclick="removeConfigItem('${arrayName}', ${index})">❌</button>
     </li>`;
   });
 }
@@ -512,8 +506,6 @@ function addConfigItem(arrayName, inputId) {
 
   if (arrayName === 'FUENTES') FUENTES.push(val);
   else if (arrayName === 'PRODUCTOS') PRODUCTOS.push(val);
-  else if (arrayName === 'PRESUPUESTOS') PRESUPUESTOS.push(val);
-  else if (arrayName === 'RESPONSABLES') RESPONSABLES.push(val);
   else if (arrayName === 'EJECUTIVOS') EJECUTIVOS.push(val);
 
   input.value = '';
@@ -527,8 +519,6 @@ function removeConfigItem(arrayName, index) {
 
   if (arrayName === 'FUENTES') FUENTES.splice(index, 1);
   else if (arrayName === 'PRODUCTOS') PRODUCTOS.splice(index, 1);
-  else if (arrayName === 'PRESUPUESTOS') PRESUPUESTOS.splice(index, 1);
-  else if (arrayName === 'RESPONSABLES') RESPONSABLES.splice(index, 1);
   else if (arrayName === 'EJECUTIVOS') EJECUTIVOS.splice(index, 1);
 
   saveConfigStorage();
@@ -623,7 +613,7 @@ window.onload = function() {
     document.getElementById('main-layout').style.display = 'none';
   }
 
-  // Escuchadores de formularios y botones
+  // Escuchadores de formularios
   const loginForm = document.getElementById('login-form');
   if (loginForm) loginForm.addEventListener('submit', handleLogin);
 

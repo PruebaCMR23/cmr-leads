@@ -2,8 +2,8 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
-// Inicializar el cliente global de Supabase
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Inicializar el cliente global de Supabase usando un nombre distinto para evitar colisiones
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // CREDENCIALES EXCLUSIVAS LOCALES ACTUALIZADAS (Para el Login Inicial)
 const AUTH_USER = "Herbolaria";
@@ -45,7 +45,7 @@ let filterEjecutivo = 'Todos';
 // 1. Cargar leads desde Supabase
 async function fetchLeadsFromSupabase() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('leads')
       .select('*')
       .order('created_at', { ascending: false });
@@ -61,7 +61,7 @@ async function fetchLeadsFromSupabase() {
 
 // 2. Escuchar cambios en tiempo real (La magia multiusuario)
 function subscribeToLeadsRealtime() {
-  supabase
+  supabaseClient
     .channel('schema-db-changes')
     .on(
       'postgres_changes',
@@ -252,7 +252,7 @@ async function handleLeadFormSubmit(e) {
   try {
     if (currentEditId) {
       // MODO EDICIÓN: Actualizar en Supabase
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('leads')
         .update(leadData)
         .eq('id', currentEditId);
@@ -261,7 +261,7 @@ async function handleLeadFormSubmit(e) {
       notify('🔄 Lead actualizado exitosamente en la nube');
     } else {
       // MODO NUEVO: Insertar en Supabase
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('leads')
         .insert([leadData]);
 
@@ -287,7 +287,7 @@ async function deleteLeadData(id) {
   
   if (confirm('¿Estás completamente seguro de eliminar este lead? Esta acción borrará el registro de la base de datos centralizada.')) {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('leads')
         .delete()
         .eq('id', id);

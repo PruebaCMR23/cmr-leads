@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM Leads — Herbolaria Saludable</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div id="login-container" class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo"><i class="ti ti-lock"></i></div>
+      <h2>Acceso al CRM</h2>
+      <p>Herbolaria Saludable</p>
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Ingresa tu usuario">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="handleLogin()">
+        <i class="ti ti-login"></i> Iniciar Sesión
+      </button>
+      <div id="login-error" class="login-error-msg"></div>
+    </div>
+  </div>
+
+  <div id="main-layout" class="layout" style="display:none">
+    <div class="top-bar">
+      <div class="top-title">
+        <div class="logo"><i class="ti ti-address-book"></i></div>
+        CRM Leads — Herbolaria Saludable <span id="user-session-badge" style="font-size:11px; margin-left:10px; background:var(--bg2); padding:3px 8px; border-radius:12px; font-weight:normal; color:var(--text2)"></span>
+      </div>
+      <div class="top-actions">
+        <button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar CSV</button>
+        <button class="btn btn-primary" onclick="openNewLead()"><i class="ti ti-plus"></i> Nuevo Lead</button>
+        <button class="btn btn-danger" onclick="handleLogout()"><i class="ti ti-logout"></i> Salir</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('dashboard',this)"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
+      <div class="tab" onclick="switchTab('leads',this)"><i class="ti ti-users"></i> Todos los Leads</div>
+      <div class="tab" onclick="switchTab('seguimiento',this)"><i class="ti ti-clock"></i> Seguimiento</div>
+      <div class="tab" onclick="switchTab('reportes',this)"><i class="ti ti-chart-bar"></i> Reportes</div>
+      <div class="tab" onclick="switchTab('config',this)"><i class="ti ti-settings"></i> Configuración</div>
+    </div>
+
+    <div id="tab-dashboard"></div>
+    <div id="tab-leads" style="display:none"></div>
+    <div id="tab-seguimiento" style="display:none"></div>
+    <div id="tab-reportes" style="display:none"></div>
+    <div id="tab-config" style="display:none"></div>
+  </div>
+
+  <div class="overlay" id="overlay" onclick="closePanel(event)">
+    <div class="panel" id="panel">
+      <button class="panel-close" onclick="closePanel(null)" title="Cerrar"><i class="ti ti-x"></i></button>
+      <div id="panel-content"></div>
+    </div>
+  </div>
+  
+  <div class="notif" id="notif"></div>
+
+  <script src="app/app.js"></script>
+</body>
+</html>

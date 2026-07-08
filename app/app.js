@@ -2,10 +2,20 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
-// Inicializar el cliente global de Supabase usando un nombre distinto para evitar colisiones
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let supabaseClient;
 
-// CREDENCIALES EXCLUSIVAS LOCALES ACTUALIZADAS (Para el Login Inicial)
+// Inicialización segura del cliente Supabase
+function initSupabase() {
+  if (typeof supabase !== 'undefined') {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    return true;
+  } else {
+    console.error("La librería global de Supabase no ha cargado correctamente.");
+    return false;
+  }
+}
+
+// CREDENCIALES EXCLUSIVAS LOCALES ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
 const AUTH_PASS = "Saludable*";
 
@@ -32,7 +42,7 @@ if (!EJECUTIVOS || EJECUTIVOS.length === 0) {
 }
 
 // Variables de control global para Leads
-let LEADS = []; // Se llenará dinámicamente desde Supabase
+let LEADS = []; 
 let currentEditId = null;
 
 // Control de Filtros
@@ -42,8 +52,8 @@ let filterEjecutivo = 'Todos';
 
 // ─── OPERACIONES DE BASE DE DATOS (SUPABASE) ──────────────────────────────────
 
-// 1. Cargar leads desde Supabase
 async function fetchLeadsFromSupabase() {
+  if (!supabaseClient) return;
   try {
     const { data, error } = await supabaseClient
       .from('leads')
@@ -59,8 +69,8 @@ async function fetchLeadsFromSupabase() {
   }
 }
 
-// 2. Escuchar cambios en tiempo real (La magia multiusuario)
 function subscribeToLeadsRealtime() {
+  if (!supabaseClient) return;
   supabaseClient
     .channel('schema-db-changes')
     .on(
@@ -68,7 +78,6 @@ function subscribeToLeadsRealtime() {
       { event: '*', schema: 'public', table: 'leads' },
       (payload) => {
         console.log('Cambio detectado en tiempo real:', payload);
-        // Recargar datos automáticamente cuando ocurra una inserción, actualización o eliminación
         fetchLeadsFromSupabase();
       }
     )
@@ -90,7 +99,6 @@ function handleLogin(e) {
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
     
-    // Ejecutar carga inicial y activar tiempo real
     fetchLeadsFromSupabase();
     subscribeToLeadsRealtime();
   } else {
@@ -103,7 +111,6 @@ function handleLogout() {
   window.location.reload();
 }
 
-// Exclusión de términos médicos/terapéuticos en auditoría simple de cumplimiento publicitario
 function checkPasswordPrompt(actionName) {
   const role = sessionStorage.getItem('crm_user_role');
   if (role === 'Primary') return true; 
@@ -130,7 +137,6 @@ function renderDashboard() {
     return matchText && matchEst && matchEjec;
   });
 
-  // Totales Tarjetas
   document.getElementById('total-leads').innerText = filtered.length;
   
   const nuevos = filtered.filter(l => l.estadolead === 'Nuevo').length;
@@ -142,7 +148,6 @@ function renderDashboard() {
   const cerrado = filtered.reduce((acc, curr) => acc + (Number(curr.montocerrado) || 0), 0);
   document.getElementById('monto-cerrado').innerText = '$' + cerrado.toLocaleString('es-MX');
 
-  // Render Tablas y Kanban
   renderTableContent(filtered);
   renderKanbanContent(filtered);
 }
@@ -215,7 +220,6 @@ function renderKanbanContent(list) {
     colContainer.appendChild(card);
   });
 
-  // Mostrar mensaje de vacío en columnas sin tarjetas
   Object.keys(columns).forEach(key => {
     const col = columns[key];
     if(col && col.children.length === 0) {
@@ -227,8 +231,8 @@ function renderKanbanContent(list) {
 // ─── ALTAS, BAJAS Y CAMBIOS EN SUPABASE ───────────────────────────────────────
 async function handleLeadFormSubmit(e) {
   e.preventDefault();
+  if(!supabaseClient) return;
 
-  // Mapeo y recolección del objeto lead
   const leadData = {
     nombre: document.getElementById('lead-nombre').value.trim(),
     empresa: document.getElementById('lead-empresa').value.trim() || null,
@@ -253,7 +257,6 @@ async function handleLeadFormSubmit(e) {
 
   try {
     if (currentEditId) {
-      // MODO EDICIÓN: Actualizar en Supabase
       const { error } = await supabaseClient
         .from('leads')
         .update(leadData)
@@ -262,7 +265,6 @@ async function handleLeadFormSubmit(e) {
       if (error) throw error;
       notify('🔄 Lead actualizado exitosamente en la nube');
     } else {
-      // MODO NUEVO: Insertar en Supabase
       const { error } = await supabaseClient
         .from('leads')
         .insert([leadData]);
@@ -271,7 +273,6 @@ async function handleLeadFormSubmit(e) {
       notify('✅ Nuevo Lead registrado exitosamente en la nube', 'success');
     }
 
-    // Cerrar Modal y Resetear Formulario
     closeLeadModal();
     document.getElementById('lead-form').reset();
     currentEditId = null;
@@ -283,9 +284,9 @@ async function handleLeadFormSubmit(e) {
 }
 
 async function deleteLeadData(id) {
-  if (!checkPasswordPrompt('Eliminar este registro de lead de forma permanente')) return;
+  if (!supabaseClient || !checkPasswordPrompt('Eliminar este registro de lead de forma permanente')) return;
   
-  if (confirm('¿Estás completamente seguro de eliminar este lead? Esta acción borrará el registro de la base de datos centralizada.')) {
+  if (confirm('¿Estás completamente seguro de eliminar este lead?')) {
     try {
       const { error } = await supabaseClient
         .from('leads')
@@ -308,7 +309,6 @@ function openEditLeadModal(id) {
   currentEditId = id;
   document.getElementById('leadModalLabel').innerText = 'Editar Lead';
 
-  // Llenar campos del modal
   document.getElementById('lead-nombre').value = lead.nombre || '';
   document.getElementById('lead-empresa').value = lead.empresa || '';
   document.getElementById('lead-telefono').value = lead.telefono || '';
@@ -316,7 +316,7 @@ function openEditLeadModal(id) {
   document.getElementById('lead-ciudad').value = lead.ciudad || '';
   document.getElementById('lead-estado-geo').value = lead.estado_geo || '';
   
-  populateSelectOptions(); // Refrescar catálogos activos primero
+  populateSelectOptions(); 
 
   document.getElementById('lead-fuente').value = lead.fuente || '';
   document.getElementById('lead-producto').value = lead.producto || '';
@@ -342,7 +342,6 @@ function openCreateLeadModal() {
   document.getElementById('leadModal').style.display = 'flex';
 }
 
-// ─── CLASES AUXILIARES Y ESTILOS ──────────────────────────────────────────────
 function getStatusBadgeClass(status) {
   switch (status) {
     case 'Nuevo': return 'badge bg-info text-dark';
@@ -370,7 +369,6 @@ function getPriorityColor(prio) {
   return 'success';
 }
 
-// ─── CONTROL DE FILTROS DEL DASHBOARD ─────────────────────────────────────────
 function setupFilterListeners() {
   const searchInput = document.getElementById('search-input');
   if (searchInput) {
@@ -391,13 +389,12 @@ function setupFilterListeners() {
   const selectExecutive = document.getElementById('filter-ejecutivo');
   if (selectExecutive) {
     selectExecutive.addEventListener('change', (e) => {
-      filterEjecutivo = e.target.value;
+      filterExecutive = e.target.value;
       renderDashboard();
     });
   }
 }
 
-// Llenar selectores dinámicos de los Modales y Filtros de Configuración
 function populateSelectOptions() {
   const fSelect = document.getElementById('lead-fuente');
   if (fSelect) {
@@ -436,7 +433,6 @@ function populateSelectOptions() {
   }
 }
 
-// ─── NOTIFICACIONES FLOTANTES TIPO TOAST ──────────────────────────────────────
 function notify(message, type = 'primary') {
   const container = document.getElementById('notification-container') || document.body;
   const toast = document.createElement('div');
@@ -452,7 +448,6 @@ function notify(message, type = 'primary') {
   setTimeout(() => { toast.remove(); }, 3500);
 }
 
-// ─── CONFIGURACIÓN LOCAL DE CATÁLOGOS (STORAGE) ──────────────────────────────
 function saveConfigStorage() {
   localStorage.setItem('cfg_admins', JSON.stringify(ADMINS));
   localStorage.setItem('cfg_fuentes', JSON.stringify(FUENTES));
@@ -526,7 +521,6 @@ function removeConfigItem(arrayName, index) {
   notify('🗑 Elemento removido del catálogo', 'warning');
 }
 
-// Manejo de cuentas SubAdmin adicionales
 function saveAdminUser(e) {
   e.preventDefault();
   const userVal = document.getElementById('cfg-admin-user').value.trim();
@@ -601,11 +595,12 @@ function removeAdminUser(index) {
 
 // ─── INIT PRINCIPAL ───────────────────────────────────────────────────────────
 window.onload = function() {
+  initSupabase();
+
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
     
-    // Iniciar conexión remota
     fetchLeadsFromSupabase();
     subscribeToLeadsRealtime();
   } else {
@@ -613,7 +608,6 @@ window.onload = function() {
     document.getElementById('main-layout').style.display = 'none';
   }
 
-  // Escuchadores de formularios
   const loginForm = document.getElementById('login-form');
   if (loginForm) loginForm.addEventListener('submit', handleLogin);
 

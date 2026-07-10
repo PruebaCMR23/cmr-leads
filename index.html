@@ -15,19 +15,17 @@
       <div class="login-logo"><i class="ti ti-lock"></i></div>
       <h2>Acceso al CRM</h2>
       <p>Herbolaria Saludable</p>
-      <form id="login-form">
-        <div class="form-group">
-          <label>Usuario</label>
-          <input type="text" id="username" placeholder="Ingresa tu usuario" required autocomplete="username">
-        </div>
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;">
-          <i class="ti ti-login"></i> Iniciar Sesión
-        </button>
-      </form>
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" id="username" placeholder="Ingresa tu usuario" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="handleLogin()">
+        <i class="ti ti-login"></i> Iniciar Sesión
+      </button>
     </div>
   </div>
 

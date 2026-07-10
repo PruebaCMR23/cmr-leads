@@ -4,7 +4,6 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 let supabaseClient;
 
-// Inicialización segura del cliente Supabase
 function initSupabase() {
   if (typeof supabase !== 'undefined') {
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -19,11 +18,9 @@ function initSupabase() {
 const AUTH_USER = "Herbolaria";
 const AUTH_PASS = "Saludable*";
 
-// Lista dinámica de administradores adicionales (se guarda en Storage local)
 let ADMINS = JSON.parse(localStorage.getItem('cfg_admins')) || [];
 let editingAdminIndex = null; 
 
-// ARRAYS EDITABLES CONFIGURABLES (Locales)
 let FUENTES = JSON.parse(localStorage.getItem('cfg_fuentes')) || [];
 let PRODUCTOS = JSON.parse(localStorage.getItem('cfg_productos')) || [];
 let PRESUPUESTOS = JSON.parse(localStorage.getItem('cfg_presupuestos')) || [];
@@ -41,17 +38,14 @@ if (!EJECUTIVOS || EJECUTIVOS.length === 0) {
   localStorage.setItem('cfg_ejecutives', JSON.stringify(EJECUTIVOS));
 }
 
-// Variables de control global para Leads
 let LEADS = []; 
 let currentEditId = null;
 
-// Control de Filtros
 let filterSearch = '';
 let filterEstado = 'Todos';
 let filterEjecutivo = 'Todos';
 
-// ─── OPERACIONES DE BASE DE DATOS (SUPABASE) ──────────────────────────────────
-
+// ─── BASE DE DATOS (SUPABASE) ──────────────────────────────────────────────────
 async function fetchLeadsFromSupabase() {
   if (!supabaseClient) return;
   try {
@@ -77,7 +71,6 @@ function subscribeToLeadsRealtime() {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'leads' },
       (payload) => {
-        console.log('Cambio detectado en tiempo real:', payload);
         fetchLeadsFromSupabase();
       }
     )
@@ -85,8 +78,7 @@ function subscribeToLeadsRealtime() {
 }
 
 // ─── AUTENTICACIÓN LOCAL ──────────────────────────────────────────────────────
-function handleLogin(e) {
-  if(e) e.preventDefault();
+function handleLogin() {
   const userVal = document.getElementById('username').value.trim();
   const passVal = document.getElementById('password').value;
 
@@ -122,7 +114,7 @@ function checkPasswordPrompt(actionName) {
   return false;
 }
 
-// ─── PROCESAMIENTO Y RENDERIZACIÓN DEL DASHBOARD ──────────────────────────────
+// ─── RENDERIZACIÓN DEL DASHBOARD ──────────────────────────────────────────────
 function renderDashboard() {
   let filtered = LEADS.filter(lead => {
     const term = filterSearch.toLowerCase();
@@ -228,7 +220,7 @@ function renderKanbanContent(list) {
   });
 }
 
-// ─── ALTAS, BAJAS Y CAMBIOS EN SUPABASE ───────────────────────────────────────
+// ─── ACCIONES EN SUPABASE ─────────────────────────────────────────────────────
 async function handleLeadFormSubmit(e) {
   e.preventDefault();
   if(!supabaseClient) return;
@@ -389,7 +381,7 @@ function setupFilterListeners() {
   const selectExecutive = document.getElementById('filter-ejecutivo');
   if (selectExecutive) {
     selectExecutive.addEventListener('change', (e) => {
-      filterExecutive = e.target.value;
+      filterEjecutivo = e.target.value;
       renderDashboard();
     });
   }
@@ -607,9 +599,6 @@ window.onload = function() {
     document.getElementById('login-container').style.display = 'block';
     document.getElementById('main-layout').style.display = 'none';
   }
-
-  const loginForm = document.getElementById('login-form');
-  if (loginForm) loginForm.addEventListener('submit', handleLogin);
 
   const leadForm = document.getElementById('lead-form');
   if (leadForm) leadForm.addEventListener('submit', handleLeadFormSubmit);

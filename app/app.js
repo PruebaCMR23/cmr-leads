@@ -831,7 +831,24 @@ function verificarRecordatoriosSeguimiento() {
     }, 1000);
   }
 }
+// ─── FUNCIÓN PARA MOSTRAR / OCULTAR EL PANEL LATERAL (FALTANTE) ────────────────
+function togglePanel(show) {
+  const overlay = document.getElementById('overlay');
+  const panel = document.getElementById('panel');
+  if (overlay && panel) {
+    if (show) {
+      overlay.classList.add('active');
+      panel.classList.add('active');
+    } else {
+      overlay.classList.remove('active');
+      panel.classList.remove('active');
+    }
+  }
+}
 
+function closePanel(e) {
+  if (!e || e.target.id === 'overlay') togglePanel(false);
+}
 // ─── INICIALIZADOR DEL CRM ────────────────────────────────────────────────────
 window.onload = async function() {
   await cargarDatosDesdeSupabase();

@@ -55,23 +55,32 @@ async function cargarDatosDesdeSupabase() {
   try {
     // 1. Cargar Configuración Global
     const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
+    
+    // Valores por defecto por si la base de datos viene vacía o da error
+    if (FUENTES.length === 0) FUENTES = ["Facebook", "WhatsApp", "Instagram", "Recomendación"];
+    if (PRODUCTOS.length === 0) PRODUCTOS = ["Suplemento Herbal", "Tratamiento Completo"];
+    if (PRESUPUESTOS.length === 0) PRESUPUESTOS = ["$0 - $500", "$500 - $1000", "$1000+"];
+
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
-        // Forzamos compatibilidad total mapeando minúsculas de Postgres de forma segura
+        
+        // Mapeo super seguro tolerante a minúsculas/mayúsculas de la base de datos
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
-        FUENTES = Array.isArray(c.fuentes) && c.fuentes.length > 0 ? c.fuentes : FUENTES;
-        PRODUCTOS = Array.isArray(c.productos) && c.productos.length > 0 ? c.productos : PRODUCTOS;
-        PRESUPUESTOS = Array.isArray(c.presupuestos) && c.presupuestos.length > 0 ? c.presupuestos : PRESUPUESTOS;
-        RESPONSABLES = Array.isArray(c.responsables) && c.responsables.length > 0 ? c.responsables : RESPONSABLES;
-        EJECUTIVOS = Array.isArray(c.ejecutives) && c.ejecutives.length > 0 ? c.ejecutives : EJECUTIVOS;
+        if (c.fuentes && Array.isArray(c.fuentes)) FUENTES = c.fuentes;
+        if (c.productos && Array.isArray(c.productos)) PRODUCTOS = c.productos;
+        if (c.presupuestos && Array.isArray(c.presupuestos)) PRESUPUESTOS = c.presupuestos;
+        
+        // Soporta tanto c.ejecutives (Postgres) como c.ejecutivos
+        const listaEjecutivos = c.ejecutives || c.ejecutivos;
+        if (listaEjecutivos && Array.isArray(listaEjecutivos)) EJECUTIVOS = listaEjecutivos;
+        
+        if (c.responsables && Array.isArray(c.responsables)) RESPONSABLES = c.responsables;
       }
-    } else {
-      console.warn("⚠️ La configuración retornó un código no exitoso. Usando arreglos por defecto.");
     }
 
-    // 2. Cargar Todos los Leads de forma segura
+    // 2. Cargar Todos los Leads
     const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { headers: supabaseHeaders });
     if (resLeads.ok) {
       const dataLeads = await resLeads.json();
@@ -81,7 +90,35 @@ async function cargarDatosDesdeSupabase() {
     }
   } catch (error) {
     console.error("❌ Error cargando datos iniciales de Supabase:", error);
-    LEADS = []; // Evita que quede como undefined y rompa el .length
+    LEADS = []; // Forzar array vacío para que no rompa el .length del dashboard
+  }
+}
+
+function handleLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-error');
+
+  const rootMatch = (u.toLowerCase() === AUTH_USER.toLowerCase() && p === AUTH_PASS);
+  const adminMatch = Array.isArray(ADMINS) && ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
+
+  if (rootMatch || adminMatch) {
+    if (err) err.style.display = 'none';
+    sessionStorage.setItem('crm_logged_in', 'true');
+    sessionStorage.setItem('crm_user', u);
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    
+    // Asegurar que LEADS sea un arreglo antes de renderizar
+    if (!Array.isArray(LEADS)) LEADS = [];
+    
+    renderDashboard();
+    verificarRecordatoriosSeguimiento();
+  } else {
+    if (err) {
+      err.style.display = 'block';
+      err.innerText = "Usuario o contraseña incorrectos.";
+    }
   }
 }
 

@@ -250,11 +250,13 @@ function openNewLead() {
   if (titleEl) titleEl.innerText = "Nuevo Lead";
   if (btnDelEl) btnDelEl.style.display = 'none';
 
-  // Limpieza segura iterando elementos existentes en el DOM
+  // Limpieza 100% segura: solo limpia el campo si realmente existe en el HTML
   const inputs = ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-puesto', 'n-monto', 'n-seg', 'n-notas', 'n-estado', 'n-estado_geo'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = (id === 'n-monto') ? '0' : '';
+    if (el) {
+      el.value = (id === 'n-monto') ? '0' : '';
+    }
   });
 
   populateSelects();

@@ -4,7 +4,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // CREDENCIALES EXCLUSIVAS ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
-const AUTH_PASS = "Saludable*\";
+const AUTH_PASS = "Saludable*"; // 🔥 
 
 // Arreglos globales dinámicos que se sincronizan con Supabase
 let ADMINS = [];

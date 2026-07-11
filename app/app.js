@@ -4,7 +4,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // CREDENCIALES EXCLUSIVAS ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
-const AUTH_PASS = "Saludable*";
+const AUTH_PASS = "Saludable*\";
 
 // Arreglos globales dinámicos que se sincronizan con Supabase
 let ADMINS = [];
@@ -18,10 +18,129 @@ let EJECUTIVOS = [
   "Yessica Carrillo - Gerencia de Ventas (Ventas Mayoreo)",
   "Emmanuel Zúñiga - Gerencia General"
 ];
-let LEADS = [];
 
-let editingLeadId = null; 
-let editingAdminIndex = null; 
+let editingAdminIndex = null;
+
+// ARREGLO DE LEADS (Manejado globalmente)
+let LEADS = [];
+let editingLeadId = null;
+
+// Headers para la API de Supabase REST
+const supabaseHeaders = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+  "Prefer": "return=representation"
+};
+
+// ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
+async function cargarDatosDesdeSupabase() {
+  try {
+    // 1. Cargar Configuración Global Global
+    const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
+    if (resConfig.ok) {
+      const dataConfig = await resConfig.json();
+      if (dataConfig && dataConfig.length > 0) {
+        const c = dataConfig[0];
+        // Parsear los arreglos JSONB o asignar por defecto si están vacíos
+        ADMINS = typeof c.admins === 'string' ? JSON.parse(c.admins) : (c.admins || []);
+        FUENTES = typeof c.fuentes === 'string' ? JSON.parse(c.fuentes) : (c.fuentes || []);
+        PRODUCTOS = typeof c.productos === 'string' ? JSON.parse(c.productos) : (c.productos || []);
+        PRESUPUESTOS = typeof c.presupuestos === 'string' ? JSON.parse(c.presupuestos) : (c.presupuestos || []);
+        RESPONSABLES = typeof c.responsables === 'string' ? JSON.parse(c.responsables) : (c.responsables || RESPONSABLES);
+        EJECUTIVOS = typeof c.ejecutives === 'string' ? JSON.parse(c.ejecutives) : (c.ejecutives || EJECUTIVOS);
+      }
+    }
+
+    // 2. Cargar Todos los Leads
+    const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { headers: supabaseHeaders });
+    if (resLeads.ok) {
+      LEADS = await resLeads.json();
+    }
+  } catch (error) {
+    console.error("❌ Error cargando datos iniciales de Supabase:", error);
+  }
+}
+
+async function guardarConfiguracionEnSupabase() {
+  try {
+    const payload = {
+      admins: ADMINS,
+      fuentes: FUENTES,
+      productos: PRODUCTOS,
+      presupuestos: PRESUPUESTOS,
+      responsables: RESPONSABLES,
+      ejecutives: EJECUTIVOS
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
+      method: 'PATCH',
+      headers: supabaseHeaders,
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.error("❌ Error guardando configuración:", e);
+  }
+}
+
+async function guardarLeadEnSupabase(lead, isNew = false) {
+  try {
+    if (isNew) {
+      // Dejamos que el ID se autogenere en Supabase gracias a IDENTITY
+      const { id, ...leadData } = lead; 
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+        method: 'POST',
+        headers: supabaseHeaders,
+        body: JSON.stringify(leadData)
+      });
+      if (res.ok) {
+        const datosInsertados = await res.json();
+        if (datosInsertados && datosInsertados.length > 0) {
+          lead.id = datosInsertados[0].id; 
+        }
+      }
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
+        method: 'PATCH',
+        headers: supabaseHeaders,
+        body: JSON.stringify(lead)
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error sincronizando lead en Supabase:", error);
+  }
+}
+
+async function eliminarLeadDeSupabase(id) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders
+    });
+  } catch (error) {
+    console.error("❌ Error eliminando lead de Supabase:", error);
+  }
+}
+
+// [El resto de tus funciones de renderizado del CRM se mantienen idénticas aquí...]
+// Asegúrate de usar la línea corregida para el substring en openEditLead:
+// document.getElementById('n-seg').value = (l && l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
+
+// ─── INICIALIZADOR ASÍNCRONO FIX (WINDOW.ONLOAD) ──────────────────────────────
+window.onload = async function() {
+  // 1. Forzar la descarga completa antes de renderizar nada visual
+  await cargarDatosDesdeSupabase();
+
+  // 2. Validar sesión e inicializar la vista con los datos ya cargados
+  if (sessionStorage.getItem('crm_logged_in') === 'true') {
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    renderDashboard();
+    verificarRecordatoriosSeguimiento();
+  } else {
+    document.getElementById('login-container').style.display = 'flex';
+    document.getElementById('main-layout').style.display = 'none';
+  }
+};
 
 // ARRAYS ESTÁTICOS ORIGINALES COMPLETAMENTE INTACTOS
 const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];

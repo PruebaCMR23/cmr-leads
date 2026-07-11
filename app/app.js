@@ -113,7 +113,10 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
       const { id, ...leadData } = lead; 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
-        headers: supabaseHeaders,
+        headers: {
+          ...supabaseHeaders,
+          "Prefer": "return=representation" // 🔥 Obliga a Supabase a retornar el ID asignado
+        },
         body: JSON.stringify(leadData)
       });
       if (res.ok) {
@@ -121,7 +124,21 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
         if (datosInsertados && datosInsertados.length > 0) {
           lead.id = datosInsertados[0].id; 
         }
+      } else {
+        const errorText = await res.text();
+        console.error("❌ Error en respuesta de Supabase:", errorText);
       }
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
+        method: 'PATCH',
+        headers: supabaseHeaders,
+        body: JSON.stringify(lead)
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error sincronizando lead en Supabase:", error);
+  }
+}
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
         method: 'PATCH',

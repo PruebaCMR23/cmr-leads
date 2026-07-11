@@ -25,12 +25,11 @@ let editingAdminIndex = null;
 let LEADS = [];
 let editingLeadId = null;
 
-// Headers para la API de Supabase REST
+// Headers para la API de Supabase REST (Optimizados para evitar 406 en GET)
 const supabaseHeaders = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json",
-  "Prefer": "return=representation"
+  "Content-Type": "application/json"
 };
 
 // ARRAYS ESTÁTICOS ORIGINALES COMPLETAMENTE INTACTOS
@@ -53,26 +52,27 @@ const ESTADO_COLORS = {
 // ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    // 1. Cargar Configuración Global
-    const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
-    
+    if (!Array.isArray(LEADS)) LEADS = [];
+    if (!Array.isArray(ADMINS)) ADMINS = [];
+
     // Valores por defecto por si la base de datos viene vacía o da error
     if (FUENTES.length === 0) FUENTES = ["Facebook", "WhatsApp", "Instagram", "Recomendación"];
     if (PRODUCTOS.length === 0) PRODUCTOS = ["Suplemento Herbal", "Tratamiento Completo"];
     if (PRESUPUESTOS.length === 0) PRESUPUESTOS = ["$0 - $500", "$500 - $1000", "$1000+"];
 
+    // 1. Cargar Configuración Global
+    const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { method: 'GET', headers: supabaseHeaders });
+    
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
         
-        // Mapeo super seguro tolerante a minúsculas/mayúsculas de la base de datos
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
         if (c.fuentes && Array.isArray(c.fuentes)) FUENTES = c.fuentes;
         if (c.productos && Array.isArray(c.productos)) PRODUCTOS = c.productos;
         if (c.presupuestos && Array.isArray(c.presupuestos)) PRESUPUESTOS = c.presupuestos;
         
-        // Soporta tanto c.ejecutives (Postgres) como c.ejecutivos
         const listaEjecutivos = c.ejecutives || c.ejecutivos;
         if (listaEjecutivos && Array.isArray(listaEjecutivos)) EJECUTIVOS = listaEjecutivos;
         
@@ -81,7 +81,7 @@ async function cargarDatosDesdeSupabase() {
     }
 
     // 2. Cargar Todos los Leads
-    const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { headers: supabaseHeaders });
+    const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { method: 'GET', headers: supabaseHeaders });
     if (resLeads.ok) {
       const dataLeads = await resLeads.json();
       LEADS = Array.isArray(dataLeads) ? dataLeads : []; 
@@ -90,35 +90,7 @@ async function cargarDatosDesdeSupabase() {
     }
   } catch (error) {
     console.error("❌ Error cargando datos iniciales de Supabase:", error);
-    LEADS = []; // Forzar array vacío para que no rompa el .length del dashboard
-  }
-}
-
-function handleLogin() {
-  const u = document.getElementById('login-user').value.trim();
-  const p = document.getElementById('login-pass').value;
-  const err = document.getElementById('login-error');
-
-  const rootMatch = (u.toLowerCase() === AUTH_USER.toLowerCase() && p === AUTH_PASS);
-  const adminMatch = Array.isArray(ADMINS) && ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
-
-  if (rootMatch || adminMatch) {
-    if (err) err.style.display = 'none';
-    sessionStorage.setItem('crm_logged_in', 'true');
-    sessionStorage.setItem('crm_user', u);
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('main-layout').style.display = 'block';
-    
-    // Asegurar que LEADS sea un arreglo antes de renderizar
-    if (!Array.isArray(LEADS)) LEADS = [];
-    
-    renderDashboard();
-    verificarRecordatoriosSeguimiento();
-  } else {
-    if (err) {
-      err.style.display = 'block';
-      err.innerText = "Usuario o contraseña incorrectos.";
-    }
+    LEADS = []; 
   }
 }
 
@@ -144,7 +116,6 @@ async function guardarConfiguracionEnSupabase() {
 
 async function guardarLeadEnSupabase(lead, isNew = false) {
   try {
-    // Mapeo seguro para que coincida exactamente con las columnas en minúsculas de la BD
     const payload = {
       nombre: lead.nombre,
       empresa: lead.empresa,
@@ -161,14 +132,17 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
       monto: lead.monto,
       estado: lead.estado,
       prioridad: lead.prioridad,
-      proximoseg: lead.proximoseg, // Compatible con base de datos
+      proximoseg: lead.proximoseg, 
       notas: lead.notas
     };
 
     if (isNew) {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
-        headers: supabaseHeaders,
+        headers: {
+          ...supabaseHeaders,
+          "Prefer": "return=representation"
+        },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -193,7 +167,7 @@ async function eliminarLeadDeSupabase(id) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, {
       method: 'DELETE',
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      headers: supabaseHeaders
     });
   } catch (error) {
     console.error("❌ Error eliminando lead de Supabase:", error);
@@ -215,6 +189,9 @@ function handleLogin() {
     sessionStorage.setItem('crm_user', u);
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
+    
+    if (!Array.isArray(LEADS)) LEADS = [];
+    
     renderDashboard();
     verificarRecordatoriosSeguimiento();
   } else {
@@ -264,20 +241,21 @@ function notify(text) {
   }
 }
 
+// ─── APERTURA TOTALMENTE BLINDADA (Evita atascos por IDs incorrectas) ───────────
 function openNewLead() {
   editingLeadId = null;
-  document.getElementById('panel-title').innerText = "Nuevo Lead";
-  document.getElementById('btn-delete-lead').style.display = 'none';
+  
+  const titleEl = document.getElementById('panel-title');
+  const btnDelEl = document.getElementById('btn-delete-lead');
+  if (titleEl) titleEl.innerText = "Nuevo Lead";
+  if (btnDelEl) btnDelEl.style.display = 'none';
 
-  document.getElementById('n-nombre').value = '';
-  document.getElementById('n-empresa').value = '';
-  document.getElementById('n-telefono').value = '';
-  document.getElementById('n-correo').value = '';
-  document.getElementById('n-puesto').value = '';
-  document.getElementById('n-monto').value = '0';
-  document.getElementById('n-seg').value = '';
-  document.getElementById('n-notas').value = '';
-  document.getElementById('n-estado').value = '';
+  // Limpieza segura iterando elementos existentes en el DOM
+  const inputs = ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-puesto', 'n-monto', 'n-seg', 'n-notas', 'n-estado', 'n-estado_geo'];
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = (id === 'n-monto') ? '0' : '';
+  });
 
   populateSelects();
   togglePanel(true);
@@ -288,32 +266,39 @@ function openEditLead(id) {
   const l = LEADS.find(x => x.id === id);
   if (!l) return; 
 
-  document.getElementById('panel-title').innerText = "Editar Lead";
-  document.getElementById('btn-delete-lead').style.display = 'inline-flex';
+  const titleEl = document.getElementById('panel-title');
+  const btnDelEl = document.getElementById('btn-delete-lead');
+  if (titleEl) titleEl.innerText = "Editar Lead";
+  if (btnDelEl) btnDelEl.style.display = 'inline-flex';
 
   populateSelects();
 
-  document.getElementById('n-nombre').value = l.nombre || '';
-  document.getElementById('n-empresa').value = l.empresa || '';
-  document.getElementById('n-telefono').value = l.telefono || '';
-  document.getElementById('n-correo').value = l.correo || '';
-  document.getElementById('n-puesto').value = l.puesto || '';
-  document.getElementById('n-monto').value = l.monto || 0;
+  if (document.getElementById('n-nombre')) document.getElementById('n-nombre').value = l.nombre || '';
+  if (document.getElementById('n-empresa')) document.getElementById('n-empresa').value = l.empresa || '';
+  if (document.getElementById('n-telefono')) document.getElementById('n-telefono').value = l.telefono || '';
+  if (document.getElementById('n-correo')) document.getElementById('n-correo').value = l.correo || '';
+  if (document.getElementById('n-puesto')) document.getElementById('n-puesto').value = l.puesto || '';
+  if (document.getElementById('n-monto')) document.getElementById('n-monto').value = l.monto || 0;
   
-  // Soporte tanto para la clave vieja como para la nueva en minúsculas
   const progSeg = l.proximoseg || l.proximoSeg || '';
-  document.getElementById('n-seg').value = (progSeg && typeof progSeg === 'string') ? progSeg.substring(0,16) : '';
+  if (document.getElementById('n-seg')) {
+    document.getElementById('n-seg').value = (progSeg && typeof progSeg === 'string') ? progSeg.substring(0, 16) : '';
+  }
   
-  document.getElementById('n-notas').value = l.notas || '';
-  document.getElementById('n-estado').value = l.estado_geo || '';
+  if (document.getElementById('n-notas')) document.getElementById('n-notas').value = l.notas || '';
+  
+  // Soporte bidireccional para el campo geográfico del formulario
+  const geoVal = l.estado_geo || '';
+  if (document.getElementById('n-estado_geo')) document.getElementById('n-estado_geo').value = geoVal;
+  if (document.getElementById('n-estado')) document.getElementById('n-estado').value = geoVal;
 
-  document.getElementById('n-fuente').value = l.fuente || '';
-  document.getElementById('n-producto').value = l.producto || '';
-  document.getElementById('n-presupuesto').value = l.presupuesto || '';
-  document.getElementById('n-responsable').value = l.responsable || '';
-  document.getElementById('n-ejecutivo').value = l.ejecutivo || '';
-  document.getElementById('n-situacion').value = l.estado || 'Nuevo';
-  document.getElementById('n-prioridad').value = l.prioridad || 'Media';
+  if (document.getElementById('n-fuente')) document.getElementById('n-fuente').value = l.fuente || '';
+  if (document.getElementById('n-producto')) document.getElementById('n-producto').value = l.producto || '';
+  if (document.getElementById('n-presupuesto')) document.getElementById('n-presupuesto').value = l.presupuesto || '';
+  if (document.getElementById('n-responsable')) document.getElementById('n-responsable').value = l.responsable || '';
+  if (document.getElementById('n-ejecutivo')) document.getElementById('n-ejecutivo').value = l.ejecutivo || '';
+  if (document.getElementById('n-situacion')) document.getElementById('n-situacion').value = l.estado || 'Nuevo';
+  if (document.getElementById('n-prioridad')) document.getElementById('n-prioridad').value = l.prioridad || 'Media';
 
   togglePanel(true);
 }
@@ -321,12 +306,14 @@ function openEditLead(id) {
 function togglePanel(show) {
   const overlay = document.getElementById('overlay');
   const panel = document.getElementById('panel');
-  if (show) {
-    overlay.classList.add('active');
-    panel.classList.add('active');
-  } else {
-    overlay.classList.remove('active');
-    panel.classList.remove('active');
+  if (overlay && panel) {
+    if (show) {
+      overlay.classList.add('active');
+      panel.classList.add('active');
+    } else {
+      overlay.classList.remove('active');
+      panel.classList.remove('active');
+    }
   }
 }
 
@@ -343,46 +330,49 @@ function populateSelects() {
   const sit = document.getElementById('n-situacion');
   const pri = document.getElementById('n-prioridad');
 
-  if(f) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(p) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(b) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(r) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(ej) ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(sit) sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if(pri) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (f && Array.isArray(FUENTES)) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (p && Array.isArray(PRODUCTOS)) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (b && Array.isArray(PRESUPUESTOS)) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (r && Array.isArray(RESPONSABLES)) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (ej && Array.isArray(EJECUTIVOS)) ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (sit && Array.isArray(ESTADOS)) sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (pri && Array.isArray(PRIORIDADES)) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
 }
 
 // ─── ACCIONES SOBRE LEADS ─────────────────────────────────────────────────────
 async function saveLead() {
-  const nombre = document.getElementById('n-nombre').value.trim();
+  const nombreEl = document.getElementById('n-nombre');
+  const nombre = nombreEl ? nombreEl.value.trim() : '';
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
+
+  // Mapeo seguro tolerando ambas nomenclaturas de campo geográfico
+  const geoEl = document.getElementById('n-estado_geo') || document.getElementById('n-estado');
+  const estadoGeoValor = geoEl ? geoEl.value.trim() : '';
 
   const l = {
     nombre,
-    empresa: document.getElementById('n-empresa').value.trim(),
-    telefono: document.getElementById('n-telefono').value.trim(),
-    correo: document.getElementById('n-correo').value.trim(),
-    puesto: document.getElementById('n-puesto').value.trim(),
-    estado_geo: document.getElementById('n-estado').value || '',
+    empresa: document.getElementById('n-empresa') ? document.getElementById('n-empresa').value.trim() : '',
+    telefono: document.getElementById('n-telefono') ? document.getElementById('n-telefono').value.trim() : '',
+    correo: document.getElementById('n-correo') ? document.getElementById('n-correo').value.trim() : '',
+    puesto: document.getElementById('n-puesto') ? document.getElementById('n-puesto').value.trim() : '',
+    estado_geo: estadoGeoValor,
     pais: 'México',
-    fuente: document.getElementById('n-fuente').value,
-    producto: document.getElementById('n-producto').value,
-    presupuesto: document.getElementById('n-presupuesto').value,
-    responsable: document.getElementById('n-responsable').value,
-    ejecutivo: document.getElementById('n-ejecutivo').value,
-    monto: parseFloat(document.getElementById('n-monto').value) || 0,
-    estado: document.getElementById('n-situacion').value,
-    prioridad: document.getElementById('n-prioridad').value,
-    proximoseg: document.getElementById('n-seg').value,
-    notas: document.getElementById('n-notas').value.trim()
+    fuente: document.getElementById('n-fuente') ? document.getElementById('n-fuente').value : '',
+    producto: document.getElementById('n-producto') ? document.getElementById('n-producto').value : '',
+    presupuesto: document.getElementById('n-presupuesto') ? document.getElementById('n-presupuesto').value : '',
+    responsable: document.getElementById('n-responsable') ? document.getElementById('n-responsable').value : '',
+    ejecutivo: document.getElementById('n-ejecutivo') ? document.getElementById('n-ejecutivo').value : '',
+    monto: document.getElementById('n-monto') ? (parseFloat(document.getElementById('n-monto').value) || 0) : 0,
+    estado: document.getElementById('n-situacion') ? document.getElementById('n-situacion').value : 'Nuevo',
+    prioridad: document.getElementById('n-prioridad') ? document.getElementById('n-prioridad').value : 'Media',
+    proximoseg: document.getElementById('n-seg') ? document.getElementById('n-seg').value : '',
+    notas: document.getElementById('n-notas') ? document.getElementById('n-notas').value.trim() : ''
   };
 
   if (editingLeadId !== null) {
     l.id = editingLeadId;
     const idx = LEADS.findIndex(x => x.id === editingLeadId);
-    if (idx !== -1) {
-      LEADS[idx] = l;
-    }
+    if (idx !== -1) LEADS[idx] = l;
     await guardarLeadEnSupabase(l, false);
     editingLeadId = null;
     notify('🔄 Lead actualizado correctamente');
@@ -393,7 +383,7 @@ async function saveLead() {
   }
 
   togglePanel(false);
-  await cargarDatosDesdeSupabase(); // Recarga limpia desde la nube
+  await cargarDatosDesdeSupabase(); 
   renderDashboard();
 }
 
@@ -412,7 +402,7 @@ async function eliminarLeadActual() {
   notify('🗑 Lead eliminado de la base de datos');
 }
 
-// ─── RENDERS VISUALES ORIGINALES COMPLETAMENTE BLINDADOS ──────────────────────
+// ─── RENDERS VISUALES ORIGINALES (Diseño Kanban Horizontal en Rejilla) ──────────
 function renderDashboard() {
   const container = document.getElementById('tab-dashboard');
   if (!container) return;
@@ -462,11 +452,11 @@ function renderDashboard() {
     leadsEnEstado.forEach(l => {
       html += `
         <div class="lead-card" onclick="openEditLead(${l.id})">
-          <div style="font-weight:600; font-size:13px; margin-bottom:4px;">${l.nombre}</div>
+          <div style="font-weight:600; font-size:13px; margin-bottom:4px; color:var(--text);">${l.nombre}</div>
           ${l.empresa ? `<div style="font-size:11px; color:var(--text2); margin-bottom:6px;"><i class="ti ti-building" style="font-size:12px;"></i> ${l.empresa}</div>` : ''}
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
             <span class="badge ${PRI_CLASS[l.prioridad] || 'b-media'}">${l.prioridad || 'Media'}</span>
-            <span style="font-weight:700; font-size:12px;">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</span>
+            <span style="font-weight:700; font-size:12px; color:var(--text);">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</span>
           </div>
         </div>
       `;

@@ -12,10 +12,34 @@ const AUTH_PASS = "Saludable*";
 let ADMINS = JSON.parse(localStorage.getItem('cfg_admins')) || [];
 let editingAdminIndex = null; // Controla si se está editando un administrador existente
 
-// ARRAYS EDITABLES CORREGIDOS (Dejados completamente limpios sin datos iniciales)
-let FUENTES = JSON.parse(localStorage.getItem('cfg_fuentes')) || [];
-let PRODUCTOS = JSON.parse(localStorage.getItem('cfg_productos')) || [];
-let PRESUPUESTOS = JSON.parse(localStorage.getItem('cfg_presupuestos')) || [];
+// ARRAYS EDITABLES CON SUS DATOS ORIGINALES TOTALMENTE RESTAURADOS
+let FUENTES = JSON.parse(localStorage.getItem('cfg_fuentes')) || [
+  'Meta Ads (Facebook/Instagram)',
+  'WhatsApp Business Directo',
+  'Sitio Web Orgánico',
+  'Google Ads',
+  'TikTok Shop / Organic',
+  'Recomendación / Boca en Boca',
+  'Marketplace (Mercado Libre/Amazon)'
+];
+
+let PRODUCTOS = JSON.parse(localStorage.getItem('cfg_productos')) || [
+  'Kit Distribuidor Inicial',
+  'Lote Mayorista Extractos (Goteros)',
+  'Suplementos Cápsulas Premium',
+  'Línea Cosmética Herbal',
+  'Materia Prima a Granel',
+  'Asesoría / Maquila de Marca',
+  'Muestras Comerciales'
+];
+
+let PRESUPUESTOS = JSON.parse(localStorage.getItem('cfg_presupuestos')) || [
+  'Menos de $5,000 MXN',
+  '$5,000 - $15,000 MXN',
+  '$15,000 - $50,000 MXN',
+  'Más de $50,000 MXN',
+  'Volumen Especial (Cotización)'
+];
 
 // ARRAYS QUE SÍ CONSERVAN SUS DATOS SOLICITADOS
 let RESPONSABLES = JSON.parse(localStorage.getItem('cfg_responsables')) || ['Marketing Digital', 'Ventas Online', 'Gerencia de Ventas', 'Gerencia General'];
@@ -130,6 +154,7 @@ function handleLogin() {
   }
 }
 
+// Mantiene exactamente la lógica original de inicio
 function handleLogout() {
   sessionStorage.clear();
   window.location.reload();
@@ -266,7 +291,7 @@ function renderDashboard() {
     `;
   }
 
-  // AQUÍ QUEDÓ CORREGIDO: nuevosLeads (con la "o")
+  // NUEVOSLEADS CORREGIDO CON TOTAL CONSISTENCIA
   container.innerHTML = `
     <div class="metrics-grid">
       <div class="metric-card"><div class="m-title">Total Leads</div><div class="m-value">${totalLeads}</div></div>
@@ -486,7 +511,6 @@ function renderConfigTags(arr, type) {
   `).join('');
 }
 
-// Helper utilitario de clases CSS estilizadas primarias
 function getBadgeClass(status) {
   switch (status) {
     case 'Nuevo': return 'bg-nuevo';
@@ -499,7 +523,6 @@ function getBadgeClass(status) {
   }
 }
 
-// Corregido también: consistencia en kanban
 function getColClassSuffix(status) {
   switch (status) {
     case 'Nuevo': return 'nuevo';

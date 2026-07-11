@@ -216,7 +216,7 @@ function openNewLead() {
 function openEditLead(id) {
   editingLeadId = id;
   const l = LEADS.find(x => x.id === id);
-  if (!l) return;
+  if (!l) return; // 🔥 Esto evita que intente leer datos si el lead no existe o está dañado
 
   document.getElementById('panel-title').innerText = "Editar Lead";
   document.getElementById('btn-delete-lead').style.display = 'inline-flex';

@@ -33,16 +33,14 @@ const supabaseHeaders = {
   "Prefer": "return=representation"
 };
 
-// ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    // 1. Cargar Configuración Global Global
+    // 1. Cargar Configuración Global
     const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
-        // Parsear los arreglos JSONB o asignar por defecto si están vacíos
         ADMINS = typeof c.admins === 'string' ? JSON.parse(c.admins) : (c.admins || []);
         FUENTES = typeof c.fuentes === 'string' ? JSON.parse(c.fuentes) : (c.fuentes || []);
         PRODUCTOS = typeof c.productos === 'string' ? JSON.parse(c.productos) : (c.productos || []);
@@ -52,16 +50,22 @@ async function cargarDatosDesdeSupabase() {
       }
     }
 
-    // 2. Cargar Todos los Leads
+    // 2. Cargar Todos los Leads de forma segura (AQUÍ ESTÁ EL CAMBIO)
     const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { headers: supabaseHeaders });
     if (resLeads.ok) {
-      LEADS = await resLeads.json();
+      const dataLeads = await resLeads.json();
+      // Si viene una lista real la asigna; si viene vacía o con error pone un arreglo limpio []
+      LEADS = Array.isArray(dataLeads) ? dataLeads : []; 
+    } else {
+      // Si la petición falla (ej. error de red o tabla no encontrada), evita que se rompa asignando una lista vacía
+      LEADS = [];
     }
+
   } catch (error) {
     console.error("❌ Error cargando datos iniciales de Supabase:", error);
+    LEADS = []; // Respaldo por si ocurre un fallo crítico en el try
   }
 }
-
 async function guardarConfiguracionEnSupabase() {
   try {
     const payload = {

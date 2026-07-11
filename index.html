@@ -66,17 +66,6 @@
   <div id="notification-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-  <script>
-    function switchTab(tabId, el) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      el.classList.add('active');
-      ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'].forEach(id => {
-        const target = document.getElementById(`tab-${id}`);
-        if(target) target.style.display = (id === tabId) ? 'block' : 'none';
-      });
-    }
-  </script>
-  <script src="app/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

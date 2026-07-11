@@ -41,12 +41,13 @@ async function cargarDatosDesdeSupabase() {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
-        ADMINS = typeof c.admins === 'string' ? JSON.parse(c.admins) : (c.admins || []);
-        FUENTES = typeof c.fuentes === 'string' ? JSON.parse(c.fuentes) : (c.fuentes || []);
-        PRODUCTOS = typeof c.productos === 'string' ? JSON.parse(c.productos) : (c.productos || []);
-        PRESUPUESTOS = typeof c.presupuestos === 'string' ? JSON.parse(c.presupuestos) : (c.presupuestos || []);
-        RESPONSABLES = typeof c.responsables === 'string' ? JSON.parse(c.responsables) : (c.responsables || RESPONSABLES);
-        EJECUTIVOS = typeof c.ejecutives === 'string' ? JSON.parse(c.ejecutives) : (c.ejecutives || EJECUTIVOS);
+        // Forzamos a que si no hay datos, se asigne un arreglo vacío [] en lugar de quedarse como undefined
+        ADMINS = Array.isArray(c.admins) ? c.admins : [];
+        FUENTES = Array.isArray(c.fuentes) ? c.fuentes : [];
+        PRODUCTOS = Array.isArray(c.productos) ? c.productos : [];
+        PRESUPUESTOS = Array.isArray(c.presupuestos) ? c.presupuestos : [];
+        RESPONSABLES = Array.isArray(c.responsables) ? c.responsables : RESPONSABLES;
+        EJECUTIVOS = Array.isArray(c.ejecutives) ? c.ejecutives : EJECUTIVOS;
       }
     }
 

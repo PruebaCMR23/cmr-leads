@@ -14,7 +14,7 @@ function initSupabase() {
   }
 }
 
-// CREDENCIALES EXCLUSIVAS LOCALES ACTUALIZADAS
+// CREDENCIALES EXCLUSIVAS LOCALES
 const AUTH_USER = "Herbolaria";
 const AUTH_PASS = "Saludable*";
 
@@ -45,7 +45,27 @@ let filterSearch = '';
 let filterEstado = 'Todos';
 let filterEjecutivo = 'Todos';
 
-// ─── BASE DE DATOS (SUPABASE) ──────────────────────────────────────────────────
+// ─── MANEJO DEL PANEL LATERAL ORIGINAL ────────────────────────────────────────
+function togglePanel(show) {
+  const overlay = document.getElementById('overlay');
+  const panel = document.getElementById('panel');
+  if (show) {
+    overlay.classList.add('active');
+    panel.classList.add('active');
+  } else {
+    overlay.classList.remove('active');
+    panel.classList.remove('active');
+    currentEditId = null;
+  }
+}
+
+function closePanel(e) {
+  if (e.target.id === 'overlay') {
+    togglePanel(false);
+  }
+}
+
+// ─── CONSULTAS A SUPABASE ─────────────────────────────────────────────────────
 async function fetchLeadsFromSupabase() {
   if (!supabaseClient) return;
   try {
@@ -57,9 +77,9 @@ async function fetchLeadsFromSupabase() {
     if (error) throw error;
     LEADS = data || [];
     renderDashboard();
+    renderAllTabViews();
   } catch (err) {
     console.error('Error al cargar leads:', err.message);
-    notify('❌ Error al conectar con la base de datos', 'danger');
   }
 }
 
@@ -67,25 +87,23 @@ function subscribeToLeadsRealtime() {
   if (!supabaseClient) return;
   supabaseClient
     .channel('schema-db-changes')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'leads' },
-      (payload) => {
-        fetchLeadsFromSupabase();
-      }
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+      fetchLeadsFromSupabase();
+    })
     .subscribe();
 }
 
-// ─── AUTENTICACIÓN LOCAL ──────────────────────────────────────────────────────
+// ─── AUTENTICACIÓN ────────────────────────────────────────────────────────────
 function handleLogin() {
-  const userVal = document.getElementById('username').value.trim();
-  const passVal = document.getElementById('password').value;
+  const userVal = document.getElementById('login-user').value.trim();
+  const passVal = document.getElementById('login-pass').value;
+  const errorDiv = document.getElementById('login-error');
 
   const isPrimary = (userVal.toLowerCase() === AUTH_USER.toLowerCase() && passVal === AUTH_PASS);
   const isExtra = ADMINS.some(admin => admin.user.toLowerCase() === userVal.toLowerCase() && admin.pass === passVal);
 
   if (isPrimary || isExtra) {
+    if(errorDiv) errorDiv.style.display = 'none';
     sessionStorage.setItem('crm_logged_in', 'true');
     sessionStorage.setItem('crm_user_role', isPrimary ? 'Primary' : 'SubAdmin');
     document.getElementById('login-container').style.display = 'none';
@@ -94,7 +112,12 @@ function handleLogin() {
     fetchLeadsFromSupabase();
     subscribeToLeadsRealtime();
   } else {
-    alert('❌ Usuario o contraseña incorrectos.');
+    if(errorDiv) {
+      errorDiv.innerText = '❌ Usuario o contraseña incorrectos.';
+      errorDiv.style.display = 'block';
+    } else {
+      alert('❌ Usuario o contraseña incorrectos.');
+    }
   }
 }
 
@@ -106,506 +129,299 @@ function handleLogout() {
 function checkPasswordPrompt(actionName) {
   const role = sessionStorage.getItem('crm_user_role');
   if (role === 'Primary') return true; 
-
   const promptPass = prompt(`⚠️ Seguridad: Introduce la contraseña maestra ("${AUTH_USER}") para: ${actionName}`);
-  if (promptPass === AUTH_PASS) return true;
-  
-  alert('❌ Acción cancelada: Contraseña incorrecta o no autorizada.');
-  return false;
+  return promptPass === AUTH_PASS;
 }
 
-// ─── RENDERIZACIÓN DEL DASHBOARD ──────────────────────────────────────────────
-function renderDashboard() {
+// ─── RENDERIZAR VISTAS COMPLETAS ──────────────────────────────────────────────
+function renderAllTabViews() {
+  // Vista 1: Dashboard estructural
+  const dashContainer = document.getElementById('tab-dashboard');
+  if (dashContainer) {
+    dashContainer.innerHTML = `
+      <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+        <div class="card p-3"><h5>Total Leads</h5><h2 id="total-leads">0</h2></div>
+        <div class="card p-3"><h5>Leads Nuevos</h5><h2 id="leads-nuevos">0</h2></div>
+        <div class="card p-3"><h5>Monto Potencial</h5><h2 id="monto-potencial">$0</h2></div>
+        <div class="card p-3"><h5>Monto Cerrado</h5><h2 id="monto-cerrado">$0</h2></div>
+      </div>
+      <div class="filters-bar" style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <input type="text" id="search-input" placeholder="Buscar por nombre, empresa, teléfono..." class="form-control" style="flex: 1;" value="${filterSearch}">
+        <select id="filter-estado" class="form-control">
+          <option value="Todos">Todos los Estados</option>
+          <option value="Nuevo">Nuevo</option>
+          <option value="En Seguimiento">En Seguimiento</option>
+          <option value="Demostración / Muestra">Demostración / Muestra</option>
+          <option value="Negociación">Negociación</option>
+          <option value="Cerrado Ganado">Cerrado Ganado</option>
+          <option value="Cerrado Perdido">Cerrado Perdido</option>
+        </select>
+      </div>
+      <div class="content-view">
+        <h4>Tabla de Leads</h4>
+        <table class="table" style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead>
+            <tr style="background: #f4f4f4; text-align: left;">
+              <th>Lead / Empresa</th><th>Contacto</th><th>Fuente</th><th>Producto</th><th>Monto Potencial</th><th>Ejecutivo</th><th>Estado</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    `;
+    setupFilterListeners();
+  }
+
+  // Vista 5: Configuración Estructural
+  const configContainer = document.getElementById('tab-config');
+  if (configContainer) {
+    configContainer.innerHTML = `
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 10px;">
+        <div>
+          <h5>Catálogo de Fuentes</h5>
+          <div style="display:flex; gap:5px; margin-bottom:10px;"><input type="text" id="input-fuente" class="form-control"><button class="btn btn-primary" onclick="addConfigItem('FUENTES', 'input-fuente')">Añadir</button></div>
+          <ul id="cfg-list-fuentes"></ul>
+        </div>
+        <div>
+          <h5>Catálogo de Productos</h5>
+          <div style="display:flex; gap:5px; margin-bottom:10px;"><input type="text" id="input-producto" class="form-control"><button class="btn btn-primary" onclick="addConfigItem('PRODUCTOS', 'input-producto')">Añadir</button></div>
+          <ul id="cfg-list-productos"></ul>
+        </div>
+      </div>
+    `;
+    renderConfigLists();
+  }
+
+  renderDashboardData();
+}
+
+function setupFilterListeners() {
+  const s = document.getElementById('search-input');
+  if(s) s.addEventListener('input', (e) => { filterSearch = e.target.value; renderDashboardData(); });
+  const e = document.getElementById('filter-estado');
+  if(e) { e.value = filterEstado; e.addEventListener('change', (evt) => { filterEstado = evt.target.value; renderDashboardData(); }); }
+}
+
+function renderDashboardData() {
   let filtered = LEADS.filter(lead => {
     const term = filterSearch.toLowerCase();
-    const matchText = (lead.nombre || '').toLowerCase().includes(term) ||
-                      (lead.empresa || '').toLowerCase().includes(term) ||
-                      (lead.telefono || '').toLowerCase().includes(term) ||
-                      (lead.correo || '').toLowerCase().includes(term);
-    
+    const matchText = (lead.nombre || '').toLowerCase().includes(term) || (lead.empresa || '').toLowerCase().includes(term);
     const matchEst = (filterEstado === 'Todos' || lead.estadolead === filterEstado);
-    const matchEjec = (filterEjecutivo === 'Todos' || lead.ejecutivo === filterEjecutivo);
-    
-    return matchText && matchEst && matchEjec;
+    return matchText && matchEst;
   });
 
-  document.getElementById('total-leads').innerText = filtered.length;
+  if(document.getElementById('total-leads')) document.getElementById('total-leads').innerText = filtered.length;
+  if(document.getElementById('leads-nuevos')) document.getElementById('leads-nuevos').innerText = filtered.filter(l => l.estadolead === 'Nuevo').length;
   
-  const nuevos = filtered.filter(l => l.estadolead === 'Nuevo').length;
-  document.getElementById('leads-nuevos').innerText = nuevos;
-
-  const potencial = filtered.reduce((acc, curr) => acc + (Number(curr.montopotencial) || 0), 0);
-  document.getElementById('monto-potencial').innerText = '$' + potencial.toLocaleString('es-MX');
-
-  const cerrado = filtered.reduce((acc, curr) => acc + (Number(curr.montocerrado) || 0), 0);
-  document.getElementById('monto-cerrado').innerText = '$' + cerrado.toLocaleString('es-MX');
-
-  renderTableContent(filtered);
-  renderKanbanContent(filtered);
-}
-
-function renderTableContent(list) {
   const tbody = document.getElementById('table-body');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No hay leads que coincidan con los filtros.</td></tr>`;
-    return;
-  }
-
-  list.forEach(lead => {
+  filtered.forEach(lead => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${lead.nombre || '-'}</strong><br><small class="text-muted">${lead.empresa || '-'}</small></td>
-      <td>${lead.telefono || '-'}<br><small class="text-muted">${lead.correo || '-'}</small></td>
-      <td><span class="badge bg-light text-dark border">${lead.fuente || 'No definida'}</span></td>
-      <td><small>${lead.producto || '-'}</small></td>
-      <td><strong>$${(Number(lead.montopotencial) || 0).toLocaleString('es-MX')}</strong></td>
-      <td><small class="text-secondary">${lead.ejecutivo || 'No asignado'}</small></td>
-      <td><span class="badge ${getStatusBadgeClass(lead.estadolead)}">${lead.estadolead || 'Nuevo'}</span></td>
-      <td><small>${lead.proximoseg || '-'}</small></td>
+      <td><strong>${lead.nombre}</strong><br><small>${lead.empresa || '-'}</small></td>
+      <td>${lead.telefono || '-'}<br><small>${lead.correo || '-'}</small></td>
+      <td>${lead.fuente || '-'}</td>
+      <td>${lead.producto || '-'}</td>
+      <td>$${Number(lead.montopotencial || 0).toLocaleString('es-MX')}</td>
+      <td>${lead.ejecutivo || '-'}</td>
+      <td><span class="badge">${lead.estadolead || 'Nuevo'}</span></td>
       <td>
-        <div class="btn-group btn-group-sm">
-          <button class="btn btn-outline-primary" onclick="openEditLeadModal('${lead.id}')" title="Editar"><i class="bi bi-pencil-square"></i></button>
-          <button class="btn btn-outline-danger" onclick="deleteLeadData('${lead.id}')" title="Eliminar"><i class="bi bi-trash"></i></button>
-        </div>
+        <button class="btn btn-primary" style="padding:2px 8px;" onclick="openEditLead('${lead.id}')">Editar</button>
       </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function renderKanbanContent(list) {
-  const columns = {
-    'Nuevo': document.getElementById('kanban-nuevo'),
-    'En Seguimiento': document.getElementById('kanban-seguimiento'),
-    'Demostración / Muestra': document.getElementById('kanban-demo'),
-    'Negociación': document.getElementById('kanban-negociacion'),
-    'Cerrado Ganado': document.getElementById('kanban-ganado'),
-    'Cerrado Perdido': document.getElementById('kanban-perdido')
-  };
+// ─── FORMULARIO DINÁMICO DENTRO DEL PANEL ORIGINAL ────────────────────────────
+function injectLeadForm(lead = {}) {
+  const content = document.getElementById('panel-content');
+  if (!content) return;
 
-  Object.values(columns).forEach(col => { if(col) col.innerHTML = ''; });
-
-  list.forEach(lead => {
-    const colContainer = columns[lead.estadolead];
-    if (!colContainer) return;
-
-    const card = document.createElement('div');
-    card.className = `kanban-card border-start border-4 ${getPriorityBorderClass(lead.prioridad)}`;
-    card.style = "background: #fdfdfd; padding: 10px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid;";
-    card.innerHTML = `
-      <div class="d-flex justify-content-between align-items-start mb-1">
-        <h6 class="mb-0 text-truncate" style="max-width: 80%; margin:0;">${lead.nombre}</h6>
-        <span class="priority-dot bg-${getPriorityColor(lead.prioridad)}" title="Prioridad ${lead.prioridad}" style="display:inline-block; width:8px; height:8px; border-radius:50%;"></span>
+  content.innerHTML = `
+    <form id="lead-form-element" onsubmit="handleLeadSubmit(event)">
+      <div class="form-group"><label>Nombre Completo *</label><input type="text" id="form-nombre" class="form-control" required value="${lead.nombre || ''}"></div>
+      <div class="form-group"><label>Empresa</label><input type="text" id="form-empresa" class="form-control" value="${lead.empresa || ''}"></div>
+      <div class="form-group"><label>Teléfono</label><input type="text" id="form-telefono" class="form-control" value="${lead.telefono || ''}"></div>
+      <div class="form-group"><label>Correo Electrónico</label><input type="email" id="form-correo" class="form-control" value="${lead.correo || ''}"></div>
+      <div class="form-group"><label>Ciudad</label><input type="text" id="form-ciudad" class="form-control" value="${lead.ciudad || ''}"></div>
+      <div class="form-group"><label>Estado Geográfico</label><input type="text" id="form-estado-geo" class="form-control" value="${lead.estado_geo || ''}"></div>
+      
+      <div class="form-group"><label>Fuente de Origen</label><select id="form-fuente" class="form-control"></select></div>
+      <div class="form-group"><label>Producto de Interés</label><select id="form-producto" class="form-control"></select></div>
+      <div class="form-group"><label>Área Responsable</label><select id="form-responsable" class="form-control"></select></div>
+      <div class="form-group"><label>Ejecutivo Asignado</label><select id="form-ejecutivo" class="form-control"></select></div>
+      
+      <div class="form-group">
+        <label>Estado del Lead</label>
+        <select id="form-estadolead" class="form-control">
+          <option value="Nuevo">Nuevo</option>
+          <option value="En Seguimiento">En Seguimiento</option>
+          <option value="Demostración / Muestra">Demostración / Muestra</option>
+          <option value="Negociación">Negociación</option>
+          <option value="Cerrado Ganado">Cerrado Ganado</option>
+          <option value="Cerrado Perdido">Cerrado Perdido</option>
+        </select>
       </div>
-      <div class="text-muted small text-truncate mb-2">${lead.empresa || 'Sin empresa'}</div>
-      <div class="d-flex justify-content-between align-items-center small mt-2">
-        <span class="text-primary font-monospace fw-bold">$${(Number(lead.montopotencial) || 0).toLocaleString('es-MX')}</span>
-        <span class="text-secondary text-truncate" style="max-width: 60%; font-size:11px;"><i class="bi bi-person"></i> ${lead.ejecutivo ? lead.ejecutivo.split(' - ')[0] : 'S/A'}</span>
+      <div class="form-group">
+        <label>Prioridad</label>
+        <select id="form-prioridad" class="form-control">
+          <option value="Baja">Baja</option>
+          <option value="Media">Media</option>
+          <option value="Alta">Alta</option>
+        </select>
       </div>
-      <div class="d-flex justify-content-end mt-2 pt-1 border-top" style="font-size: 11px;">
-        <a href="javascript:void(0)" class="text-primary me-2" onclick="openEditLeadModal('${lead.id}')"><i class="bi bi-pencil"></i> Editar</a>
+      
+      <div class="form-group"><label>Próximo Seguimiento</label><input type="date" id="form-proximoseg" class="form-control" value="${lead.proximoseg || ''}"></div>
+      <div class="form-group"><label>Monto Potencial ($)</label><input type="number" id="form-montopotencial" class="form-control" value="${lead.montopotencial || 0}"></div>
+      <div class="form-group"><label>Monto Cerrado ($)</label><input type="number" id="form-montocerrado" class="form-control" value="${lead.montocerrado || 0}"></div>
+      <div class="form-group"><label>Notas de Ventas</label><textarea id="form-notasventas" class="form-control" rows="2">${lead.notasventas || ''}</textarea></div>
+      <div class="form-group"><label>Notas de Gerencia</label><textarea id="form-notasgerencia" class="form-control" rows="2">${lead.notasgerencia || ''}</textarea></div>
+      
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Guardar Lead</button>
+        ${lead.id ? `<button type="button" class="btn btn-danger" onclick="deleteLead('${lead.id}')">Eliminar</button>` : ''}
       </div>
-    `;
-    colContainer.appendChild(card);
-  });
+    </form>
+  `;
 
-  Object.keys(columns).forEach(key => {
-    const col = columns[key];
-    if(col && col.children.length === 0) {
-      col.innerHTML = `<div class="text-center text-muted my-3 small p-2" style="border: 1px dashed #ddd; border-radius:4px;">Sin leads</div>`;
-    }
-  });
+  // Poblar los selects dinámicos con tus arrays locales
+  const selFuente = document.getElementById('form-fuente');
+  FUENTES.forEach(f => selFuente.innerHTML += `<option value="${f}" ${lead.fuente === f ? 'selected' : ''}>${f}</option>`);
+
+  const selProd = document.getElementById('form-producto');
+  PRODUCTOS.forEach(p => selProd.innerHTML += `<option value="${p}" ${lead.producto === p ? 'selected' : ''}>${p}</option>`);
+
+  const selResp = document.getElementById('form-responsable');
+  RESPONSABLES.forEach(r => selResp.innerHTML += `<option value="${r}" ${lead.responsable === r ? 'selected' : ''}>${r}</option>`);
+
+  const selEjec = document.getElementById('form-ejecutivo');
+  EJECUTIVOS.forEach(e => selEjec.innerHTML += `<option value="${e}" ${lead.ejecutivo === e ? 'selected' : ''}>${e}</option>`);
+
+  if(lead.estadolead) document.getElementById('form-estadolead').value = lead.estadolead;
+  if(lead.prioridad) document.getElementById('form-prioridad').value = lead.prioridad;
 }
 
-// ─── ACCIONES EN SUPABASE ─────────────────────────────────────────────────────
-async function handleLeadFormSubmit(e) {
+// ─── ACCIONES DEL USUARIO SOBRE LEADS ─────────────────────────────────────────
+function openNewLead() {
+  currentEditId = null;
+  document.getElementById('panel-title').innerText = "Nuevo Lead";
+  injectLeadForm();
+  togglePanel(true);
+}
+
+function openEditLead(id) {
+  const lead = LEADS.find(l => String(l.id) === String(id));
+  if(!lead) return;
+  currentEditId = id;
+  document.getElementById('panel-title').innerText = "Editar Lead";
+  injectLeadForm(lead);
+  togglePanel(true);
+}
+
+async function handleLeadSubmit(e) {
   e.preventDefault();
   if(!supabaseClient) return;
 
-  const leadData = {
-    nombre: document.getElementById('lead-nombre').value.trim(),
-    empresa: document.getElementById('lead-empresa').value.trim() || null,
-    telefono: document.getElementById('lead-telefono').value.trim() || null,
-    correo: document.getElementById('lead-correo').value.trim() || null,
-    ciudad: document.getElementById('lead-ciudad').value.trim() || null,
-    estado_geo: document.getElementById('lead-estado-geo').value || null,
-    fuente: document.getElementById('lead-fuente').value || null,
-    producto: document.getElementById('lead-producto').value || null,
-    presupuestos: document.getElementById('lead-presupuesto').value || null,
-    responsable: document.getElementById('lead-responsable').value || null,
-    ejecutivo: document.getElementById('lead-ejecutivo').value || null,
-    estadolead: document.getElementById('lead-estado').value,
-    prioridad: document.getElementById('lead-prioridad').value,
-    proximoseg: document.getElementById('lead-proximo-seg').value || null,
-    montopotencial: parseInt(document.getElementById('lead-monto-potencial').value) || 0,
-    montocerrado: parseInt(document.getElementById('lead-monto-cerrado').value) || 0,
-    notasventas: document.getElementById('lead-notas-ventas').value.trim() || null,
-    notasgerencia: document.getElementById('lead-notas-gerencia').value.trim() || null,
+  const dataSave = {
+    nombre: document.getElementById('form-nombre').value.trim(),
+    empresa: document.getElementById('form-empresa').value.trim() || null,
+    telefono: document.getElementById('form-telefono').value.trim() || null,
+    correo: document.getElementById('form-correo').value.trim() || null,
+    ciudad: document.getElementById('form-ciudad').value.trim() || null,
+    estado_geo: document.getElementById('form-estado-geo').value || null,
+    fuente: document.getElementById('form-fuente').value || null,
+    producto: document.getElementById('form-producto').value || null,
+    responsable: document.getElementById('form-responsable').value || null,
+    ejecutivo: document.getElementById('form-ejecutivo').value || null,
+    estadolead: document.getElementById('form-estadolead').value,
+    prioridad: document.getElementById('form-prioridad').value,
+    proximoseg: document.getElementById('form-proximoseg').value || null,
+    montopotencial: parseInt(document.getElementById('form-montopotencial').value) || 0,
+    montocerrado: parseInt(document.getElementById('form-montocerrado').value) || 0,
+    notasventas: document.getElementById('form-notasventas').value.trim() || null,
+    notasgerencia: document.getElementById('form-notasgerencia').value.trim() || null,
     ultimaactualizacion: new Date().toLocaleString('es-MX')
   };
 
   try {
-    if (currentEditId) {
-      const { error } = await supabaseClient
-        .from('leads')
-        .update(leadData)
-        .eq('id', currentEditId);
-
-      if (error) throw error;
-      notify('🔄 Lead actualizado exitosamente en la nube');
+    if(currentEditId) {
+      const { error } = await supabaseClient.from('leads').update(dataSave).eq('id', currentEditId);
+      if(error) throw error;
     } else {
-      const { error } = await supabaseClient
-        .from('leads')
-        .insert([leadData]);
-
-      if (error) throw error;
-      notify('✅ Nuevo Lead registrado exitosamente en la nube', 'success');
+      const { error } = await supabaseClient.from('leads').insert([dataSave]);
+      if(error) throw error;
     }
-
-    closeLeadModal();
-    document.getElementById('lead-form').reset();
-    currentEditId = null;
-
-  } catch (err) {
-    console.error('Error al guardar lead:', err.message);
-    alert('❌ Ocurrió un error al guardar los datos en Supabase.');
+    togglePanel(false);
+    fetchLeadsFromSupabase();
+  } catch(err) {
+    alert('❌ Error al guardar en Supabase: ' + err.message);
   }
 }
 
-async function deleteLeadData(id) {
-  if (!supabaseClient || !checkPasswordPrompt('Eliminar este registro de lead de forma permanente')) return;
-  
-  if (confirm('¿Estás completamente seguro de eliminar este lead?')) {
-    try {
-      const { error } = await supabaseClient
-        .from('leads')
-        .delete()
-        .eq('id', id);
+async function deleteLead(id) {
+  if(!checkPasswordPrompt('Eliminar Lead de la nube')) return;
+  if(!confirm('¿Seguro que deseas eliminar este registro?')) return;
 
-      if (error) throw error;
-      notify('🗑 Lead eliminado de la base de datos central', 'warning');
-    } catch (err) {
-      console.error('Error al eliminar lead:', err.message);
-      alert('❌ Error al intentar eliminar de Supabase.');
-    }
+  try {
+    const { error } = await supabaseClient.from('leads').delete().eq('id', id);
+    if(error) throw error;
+    togglePanel(false);
+    fetchLeadsFromSupabase();
+  } catch(err) {
+    alert('❌ Error al eliminar: ' + err.message);
   }
 }
 
-function openEditLeadModal(id) {
-  const lead = LEADS.find(l => String(l.id) === String(id));
-  if (!lead) return;
-
-  currentEditId = id;
-  document.getElementById('leadModalLabel').innerText = 'Editar Lead';
-
-  document.getElementById('lead-nombre').value = lead.nombre || '';
-  document.getElementById('lead-empresa').value = lead.empresa || '';
-  document.getElementById('lead-telefono').value = lead.telefono || '';
-  document.getElementById('lead-correo').value = lead.correo || '';
-  document.getElementById('lead-ciudad').value = lead.ciudad || '';
-  document.getElementById('lead-estado-geo').value = lead.estado_geo || '';
-  
-  populateSelectOptions(); 
-
-  document.getElementById('lead-fuente').value = lead.fuente || '';
-  document.getElementById('lead-producto').value = lead.producto || '';
-  document.getElementById('lead-presupuesto').value = lead.presupuestos || '';
-  document.getElementById('lead-responsable').value = lead.responsable || '';
-  document.getElementById('lead-ejecutivo').value = lead.ejecutivo || '';
-  document.getElementById('lead-estado').value = lead.estadolead || 'Nuevo';
-  document.getElementById('lead-prioridad').value = lead.prioridad || 'Media';
-  document.getElementById('lead-proximo-seg').value = lead.proximoseg || '';
-  document.getElementById('lead-monto-potencial').value = lead.montopotencial || 0;
-  document.getElementById('lead-monto-cerrado').value = lead.montocerrado || 0;
-  document.getElementById('lead-notas-ventas').value = lead.notasventas || '';
-  document.getElementById('lead-notas-gerencia').value = lead.notasgerencia || '';
-
-  document.getElementById('leadModal').style.display = 'flex';
-}
-
-function openCreateLeadModal() {
-  currentEditId = null;
-  document.getElementById('leadModalLabel').innerText = 'Nuevo Lead';
-  document.getElementById('lead-form').reset();
-  populateSelectOptions();
-  document.getElementById('leadModal').style.display = 'flex';
-}
-
-function getStatusBadgeClass(status) {
-  switch (status) {
-    case 'Nuevo': return 'badge bg-info text-dark';
-    case 'En Seguimiento': return 'badge bg-primary text-white';
-    case 'Demostración / Muestra': return 'badge bg-warning text-dark';
-    case 'Negociación': return 'badge bg-dark text-light';
-    case 'Cerrado Ganado': return 'badge bg-success text-white';
-    case 'Cerrado Perdido': return 'badge bg-danger text-white';
-    default: return 'badge bg-secondary text-white';
+// ─── ADICIONALES DE CONFIGURACIÓN ─────────────────────────────────────────────
+function renderConfigLists() {
+  const lf = document.getElementById('cfg-list-fuentes');
+  if(lf) {
+    lf.innerHTML = '';
+    FUENTES.forEach((f, i) => lf.innerHTML += `<li>${f} <button onclick="removeConfigItem('FUENTES', ${i})">×</button></li>`);
+  }
+  const lp = document.getElementById('cfg-list-productos');
+  if(lp) {
+    lp.innerHTML = '';
+    PRODUCTOS.forEach((p, i) => lp.innerHTML += `<li>${p} <button onclick="removeConfigItem('PRODUCTOS', ${i})">×</button></li>`);
   }
 }
 
-function getPriorityBorderClass(prio) {
-  switch (prio) {
-    case 'Alta': return 'border-danger';
-    case 'Media': return 'border-warning';
-    case 'Baja': return 'border-success';
-    default: return 'border-secondary';
-  }
-}
+function addConfigItem(type, inputId) {
+  const input = document.getElementById(inputId);
+  const val = input ? input.value.trim() : '';
+  if(!val) return;
 
-function getPriorityColor(prio) {
-  if (prio === 'Alta') return 'danger';
-  if (prio === 'Media') return 'warning';
-  return 'success';
-}
+  if(type === 'FUENTES') FUENTES.push(val);
+  if(type === 'PRODUCTOS') PRODUCTOS.push(val);
 
-function setupFilterListeners() {
-  const searchInput = document.getElementById('search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      filterSearch = e.target.value;
-      renderDashboard();
-    });
-  }
-
-  const selectEstado = document.getElementById('filter-estado');
-  if (selectEstado) {
-    selectEstado.addEventListener('change', (e) => {
-      filterEstado = e.target.value;
-      renderDashboard();
-    });
-  }
-
-  const selectExecutive = document.getElementById('filter-ejecutivo');
-  if (selectExecutive) {
-    selectExecutive.addEventListener('change', (e) => {
-      filterEjecutivo = e.target.value;
-      renderDashboard();
-    });
-  }
-}
-
-function populateSelectOptions() {
-  const fSelect = document.getElementById('lead-fuente');
-  if (fSelect) {
-    fSelect.innerHTML = '<option value="">Seleccione...</option>';
-    FUENTES.forEach(f => fSelect.innerHTML += `<option value="${f}">${f}</option>`);
-  }
-
-  const pSelect = document.getElementById('lead-producto');
-  if (pSelect) {
-    pSelect.innerHTML = '<option value="">Seleccione...</option>';
-    PRODUCTOS.forEach(p => pSelect.innerHTML += `<option value="${p}">${p}</option>`);
-  }
-
-  const bSelect = document.getElementById('lead-presupuesto');
-  if (bSelect) {
-    bSelect.innerHTML = '<option value="">Seleccione...</option>';
-    PRESUPUESTOS.forEach(b => bSelect.innerHTML += `<option value="${b}">${b}</option>`);
-  }
-
-  const rSelect = document.getElementById('lead-responsable');
-  if (rSelect) {
-    rSelect.innerHTML = '<option value="">Seleccione...</option>';
-    RESPONSABLES.forEach(r => rSelect.innerHTML += `<option value="${r}">${r}</option>`);
-  }
-
-  const eSelect = document.getElementById('lead-ejecutivo');
-  const filterEjec = document.getElementById('filter-ejecutivo');
-  if (eSelect) {
-    eSelect.innerHTML = '<option value="">Seleccione...</option>';
-    if (filterEjec) filterEjec.innerHTML = '<option value="Todos">Todos los Ejecutivos</option>';
-    
-    EJECUTIVOS.forEach(e => {
-      eSelect.innerHTML += `<option value="${e}">${e}</option>`;
-      if (filterEjec) filterEjec.innerHTML += `<option value="${e}">${e}</option>`;
-    });
-  }
-}
-
-function notify(message, type = 'primary') {
-  const container = document.getElementById('notification-container') || document.body;
-  const toast = document.createElement('div');
-  toast.className = `alert alert-${type} alert-dismissible fade show shadow position-fixed bottom-0 end-0 m-3`;
-  toast.style = "z-index: 9999; min-width: 250px; background: #fff; padding: 15px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 5px solid #20c997;";
-  toast.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div>${message}</div>
-      <button type="button" style="border:none; background:transparent; font-size:16px; cursor:pointer;" onclick="this.parentElement.parentElement.remove()">×</button>
-    </div>
-  `;
-  container.appendChild(toast);
-  setTimeout(() => { toast.remove(); }, 3500);
-}
-
-function saveConfigStorage() {
-  localStorage.setItem('cfg_admins', JSON.stringify(ADMINS));
   localStorage.setItem('cfg_fuentes', JSON.stringify(FUENTES));
   localStorage.setItem('cfg_productos', JSON.stringify(PRODUCTOS));
-  localStorage.setItem('cfg_presupuestos', JSON.stringify(PRESUPUESTOS));
-  localStorage.setItem('cfg_responsables', JSON.stringify(RESPONSABLES));
-  localStorage.setItem('cfg_ejecutives', JSON.stringify(EJECUTIVOS));
+  renderAllTabViews();
 }
 
-function renderConfig() {
-  const listAdmins = document.getElementById('cfg-list-admins');
-  if (listAdmins) {
-    listAdmins.innerHTML = '';
-    ADMINS.forEach((adm, i) => {
-      listAdmins.innerHTML += `<li style="display:flex; justify-content:space-between; margin-bottom:5px;">
-        <span><strong>${adm.user}</strong> (Adicional)</span>
-        <div>
-          <button class="btn btn-sm" onclick="startEditAdmin(${i})">✏️</button>
-          <button class="btn btn-sm" onclick="removeAdminUser(${i})">🗑️</button>
-        </div>
-      </li>`;
-    });
-  }
+function removeConfigItem(type, index) {
+  if(type === 'FUENTES') FUENTES.splice(index, 1);
+  if(type === 'PRODUCTOS') PRODUCTOS.splice(index, 1);
 
-  renderGenericConfigList('cfg-list-fuentes', FUENTES, 'FUENTES');
-  renderGenericConfigList('cfg-list-productos', PRODUCTOS, 'PRODUCTOS');
-  renderGenericConfigList('cfg-list-ejecutivos', EJECUTIVOS, 'EJECUTIVOS');
-
-  populateSelectOptions();
+  localStorage.setItem('cfg_fuentes', JSON.stringify(FUENTES));
+  localStorage.setItem('cfg_productos', JSON.stringify(PRODUCTOS));
+  renderAllTabViews();
 }
 
-function renderGenericConfigList(elementId, array, arrayName) {
-  const listEl = document.getElementById(elementId);
-  if (!listEl) return;
-  listEl.innerHTML = '';
-  array.forEach((item, index) => {
-    listEl.innerHTML += `<li style="display:flex; justify-content:space-between; margin-bottom:3px;">
-      <span>${item}</span>
-      <button style="border:none; background:transparent; cursor:pointer;" onclick="removeConfigItem('${arrayName}', ${index})">❌</button>
-    </li>`;
-  });
-}
-
-function addConfigItem(arrayName, inputId) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  const val = input.value.trim();
-  if (!val) return;
-
-  if (!checkPasswordPrompt(`Agregar el elemento "${val}" a la configuración global`)) return;
-
-  if (arrayName === 'FUENTES') FUENTES.push(val);
-  else if (arrayName === 'PRODUCTOS') PRODUCTOS.push(val);
-  else if (arrayName === 'EJECUTIVOS') EJECUTIVOS.push(val);
-
-  input.value = '';
-  saveConfigStorage();
-  renderConfig();
-  notify('➕ Elemento agregado a la configuración');
-}
-
-function removeConfigItem(arrayName, index) {
-  if (!checkPasswordPrompt('Eliminar un elemento de la configuración global')) return;
-
-  if (arrayName === 'FUENTES') FUENTES.splice(index, 1);
-  else if (arrayName === 'PRODUCTOS') PRODUCTOS.splice(index, 1);
-  else if (arrayName === 'EJECUTIVOS') EJECUTIVOS.splice(index, 1);
-
-  saveConfigStorage();
-  renderConfig();
-  notify('🗑 Elemento removido del catálogo', 'warning');
-}
-
-function saveAdminUser(e) {
-  e.preventDefault();
-  const userVal = document.getElementById('cfg-admin-user').value.trim();
-  const passVal = document.getElementById('cfg-admin-pass').value;
-  if (!userVal || !passVal) return;
-
-  if (userVal.toLowerCase() === AUTH_USER.toLowerCase()) {
-    alert('❌ No puedes usar el nombre de la cuenta maestra principal.');
-    return;
-  }
-
-  if (editingAdminIndex !== null) {
-    updateAdminUser(userVal, passVal);
-    return;
-  }
-
-  const existe = ADMINS.some(admin => admin.user.toLowerCase() === userVal.toLowerCase());
-  if (existe) {
-    alert('❌ Ese nombre de usuario ya está registrado.');
-    return;
-  }
-
-  if (!checkPasswordPrompt(`Crear accesos para el nuevo administrador "${userVal}"`)) return;
-
-  ADMINS.push({ user: userVal, pass: passVal });
-  document.getElementById('admin-form').reset();
-  saveConfigStorage();
-  renderConfig();
-  notify('👥 Nuevo administrador adicional guardado correctamente', 'success');
-}
-
-function startEditAdmin(index) {
-  editingAdminIndex = index;
-  const adm = ADMINS[index];
-  document.getElementById('cfg-admin-user').value = adm.user;
-  document.getElementById('cfg-admin-pass').value = adm.pass;
-  document.getElementById('btn-admin-submit').innerText = 'Actualizar Usuario';
-}
-
-function updateAdminUser(userVal, passVal) {
-  const existeDuplicado = ADMINS.some((admin, i) => i !== editingAdminIndex && admin.user.toLowerCase() === userVal.toLowerCase());
-  if (existeDuplicado) {
-    alert('❌ Otro administrador ya está usando ese nombre de usuario.');
-    return;
-  }
-
-  if (!checkPasswordPrompt(`Modificar la configuración del usuario "${ADMINS[editingAdminIndex].user}"`)) return;
-
-  ADMINS[editingAdminIndex] = { user: userVal, pass: passVal };
-  editingAdminIndex = null;
-  document.getElementById('btn-admin-submit').innerText = 'Guardar Usuario';
-  document.getElementById('admin-form').reset();
-
-  saveConfigStorage();
-  renderConfig();
-  notify('🔄 Cuenta de administrador modificada correctamente');
-}
-
-function removeAdminUser(index) {
-  const adminTarget = ADMINS[index];
-  if (!adminTarget) return;
-
-  if (!checkPasswordPrompt(`Eliminar permanentemente los accesos de "${adminTarget.user}"`)) return;
-
-  ADMINS.splice(index, 1);
-  if (editingAdminIndex === index) editingAdminIndex = null;
-
-  saveConfigStorage();
-  renderConfig();
-  notify('🗑 Administrador eliminado del sistema');
-}
-
-// ─── INIT PRINCIPAL ───────────────────────────────────────────────────────────
+// ─── INICIALIZACIÓN AUTOMÁTICA ────────────────────────────────────────────────
 window.onload = function() {
   initSupabase();
 
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
-    
     fetchLeadsFromSupabase();
     subscribeToLeadsRealtime();
   } else {
     document.getElementById('login-container').style.display = 'block';
     document.getElementById('main-layout').style.display = 'none';
   }
-
-  const leadForm = document.getElementById('lead-form');
-  if (leadForm) leadForm.addEventListener('submit', handleLeadFormSubmit);
-
-  const adminForm = document.getElementById('admin-form');
-  if (adminForm) adminForm.addEventListener('submit', saveAdminUser);
-
-  setupFilterListeners();
-  renderConfig();
 };

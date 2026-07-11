@@ -266,10 +266,11 @@ function renderDashboard() {
     `;
   }
 
+  // AQUÍ QUEDÓ CORREGIDO: nuevosLeads (con la "o")
   container.innerHTML = `
     <div class="metrics-grid">
       <div class="metric-card"><div class="m-title">Total Leads</div><div class="m-value">${totalLeads}</div></div>
-      <div class="metric-card"><div class="m-title">Leads Nuevos</div><div class="m-value">${nuevsLeads}</div></div>
+      <div class="metric-card"><div class="m-title">Leads Nuevos</div><div class="m-value">${nuevosLeads}</div></div>
       <div class="metric-card"><div class="m-title">Monto Potencial</div><div class="m-value">$${montoPotencial.toLocaleString('es-MX', {minimumFractionDigits:2})}</div></div>
       <div class="metric-card"><div class="m-title">Monto Cerrado</div><div class="m-value">$${montoCerrado.toLocaleString('es-MX', {minimumFractionDigits:2})}</div></div>
     </div>
@@ -498,6 +499,7 @@ function getBadgeClass(status) {
   }
 }
 
+// Corregido también: consistencia en kanban
 function getColClassSuffix(status) {
   switch (status) {
     case 'Nuevo': return 'nuevo';

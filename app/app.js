@@ -25,7 +25,7 @@ let editingAdminIndex = null;
 let LEADS = [];
 let editingLeadId = null;
 
-// Headers para la API de Supabase REST (Optimizados para evitar 406 en GET)
+// Headers para la API de Supabase REST
 const supabaseHeaders = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
@@ -43,11 +43,6 @@ const STATUS_CLASS = {
 };
 const PRI_CLASS = { 'Alta': 'b-alta', 'Media': 'b-media', 'Baja': 'b-baja' };
 const BAR_COLORS = ['#378ADD', '#1D9E75', '#D85A30', '#D4537E', '#7F77DD', '#639922', '#BA7517', '#E24B4A', '#888780', '#0F6E56'];
-const ESTADO_COLORS = {
-  'Nuevo': '#378ADD', 'Contactado': '#7F77DD', 'Calificado': '#639922',
-  'Propuesta Enviada': '#BA7517', 'En Negociación': '#D4537E',
-  'Cerrado Ganado': '#1D9E75', 'Cerrado Perdido': '#E24B4A', 'Abandonado': '#888780'
-};
 
 // ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
 async function cargarDatosDesdeSupabase() {
@@ -55,7 +50,6 @@ async function cargarDatosDesdeSupabase() {
     if (!Array.isArray(LEADS)) LEADS = [];
     if (!Array.isArray(ADMINS)) ADMINS = [];
 
-    // Valores por defecto por si la base de datos viene vacía o da error
     if (FUENTES.length === 0) FUENTES = ["Facebook", "WhatsApp", "Instagram", "Recomendación"];
     if (PRODUCTOS.length === 0) PRODUCTOS = ["Suplemento Herbal", "Tratamiento Completo"];
     if (PRESUPUESTOS.length === 0) PRESUPUESTOS = ["$0 - $500", "$500 - $1000", "$1000+"];
@@ -133,7 +127,7 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
       estado: lead.estado,
       prioridad: lead.prioridad,
       proximoseg: lead.proximoseg, 
-      notas: lead.notas
+      notes: lead.notas || lead.notes
     };
 
     if (isNew) {
@@ -189,8 +183,6 @@ function handleLogin() {
     sessionStorage.setItem('crm_user', u);
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
-    
-    if (!Array.isArray(LEADS)) LEADS = [];
     
     renderDashboard();
     verificarRecordatoriosSeguimiento();
@@ -250,7 +242,7 @@ function openNewLead() {
   if (titleEl) titleEl.innerText = "Nuevo Lead";
   if (btnDelEl) btnDelEl.style.display = 'none';
 
-  // Limpieza 100% segura: solo limpia el campo si realmente existe en el HTML
+  // Limpieza 100% segura que valida que el elemento exista antes de asignarle valor
   const inputs = ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-puesto', 'n-monto', 'n-seg', 'n-notas', 'n-estado', 'n-estado_geo'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
@@ -287,9 +279,8 @@ function openEditLead(id) {
     document.getElementById('n-seg').value = (progSeg && typeof progSeg === 'string') ? progSeg.substring(0, 16) : '';
   }
   
-  if (document.getElementById('n-notas')) document.getElementById('n-notas').value = l.notas || '';
+  if (document.getElementById('n-notas')) document.getElementById('n-notas').value = l.notas || l.notes || '';
   
-  // Soporte bidireccional para el campo geográfico del formulario
   const geoVal = l.estado_geo || '';
   if (document.getElementById('n-estado_geo')) document.getElementById('n-estado_geo').value = geoVal;
   if (document.getElementById('n-estado')) document.getElementById('n-estado').value = geoVal;
@@ -347,7 +338,6 @@ async function saveLead() {
   const nombre = nombreEl ? nombreEl.value.trim() : '';
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
 
-  // Mapeo seguro tolerando ambas nomenclaturas de campo geográfico
   const geoEl = document.getElementById('n-estado_geo') || document.getElementById('n-estado');
   const estadoGeoValor = geoEl ? geoEl.value.trim() : '';
 
@@ -539,7 +529,7 @@ function filterLeadsTable() {
     if (est && l.estado !== est) match = false;
     if (pri && l.prioridad !== pri) match = false;
     if (query) {
-      const txt = (l.nombre + ' ' + (l.empresa || '') + ' ' + (l.notas || '')).toLowerCase();
+      const txt = (l.nombre + ' ' + (l.empresa || '') + ' ' + (l.notas || l.notes || '')).toLowerCase();
       if (!txt.includes(query)) match = false;
     }
     row.style.display = match ? '' : 'none';
@@ -831,24 +821,7 @@ function verificarRecordatoriosSeguimiento() {
     }, 1000);
   }
 }
-// ─── FUNCIÓN PARA MOSTRAR / OCULTAR EL PANEL LATERAL (FALTANTE) ────────────────
-function togglePanel(show) {
-  const overlay = document.getElementById('overlay');
-  const panel = document.getElementById('panel');
-  if (overlay && panel) {
-    if (show) {
-      overlay.classList.add('active');
-      panel.classList.add('active');
-    } else {
-      overlay.classList.remove('active');
-      panel.classList.remove('active');
-    }
-  }
-}
 
-function closePanel(e) {
-  if (!e || e.target.id === 'overlay') togglePanel(false);
-}
 // ─── INICIALIZADOR DEL CRM ────────────────────────────────────────────────────
 window.onload = async function() {
   await cargarDatosDesdeSupabase();

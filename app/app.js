@@ -229,7 +229,7 @@ function openEditLead(id) {
   document.getElementById('n-correo').value = l.correo || '';
   document.getElementById('n-puesto').value = l.puesto || '';
   document.getElementById('n-monto').value = l.monto || '';
-  document.getElementById('n-seg').value = l.proximoSeg ? l.proximoSeg.substring(0,16) : '';
+  document.getElementById('n-seg').value = (l && l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
   document.getElementById('n-notas').value = l.notas || '';
   document.getElementById('n-estado').value = l.estado_geo || '';
 

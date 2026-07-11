@@ -59,6 +59,7 @@ async function cargarDatosDesdeSupabase() {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
+        // Forzamos compatibilidad total mapeando minúsculas de Postgres de forma segura
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
         FUENTES = Array.isArray(c.fuentes) && c.fuentes.length > 0 ? c.fuentes : FUENTES;
         PRODUCTOS = Array.isArray(c.productos) && c.productos.length > 0 ? c.productos : PRODUCTOS;
@@ -66,6 +67,8 @@ async function cargarDatosDesdeSupabase() {
         RESPONSABLES = Array.isArray(c.responsables) && c.responsables.length > 0 ? c.responsables : RESPONSABLES;
         EJECUTIVOS = Array.isArray(c.ejecutives) && c.ejecutives.length > 0 ? c.ejecutives : EJECUTIVOS;
       }
+    } else {
+      console.warn("⚠️ La configuración retornó un código no exitoso. Usando arreglos por defecto.");
     }
 
     // 2. Cargar Todos los Leads de forma segura
@@ -78,7 +81,7 @@ async function cargarDatosDesdeSupabase() {
     }
   } catch (error) {
     console.error("❌ Error cargando datos iniciales de Supabase:", error);
-    LEADS = [];
+    LEADS = []; // Evita que quede como undefined y rompa el .length
   }
 }
 

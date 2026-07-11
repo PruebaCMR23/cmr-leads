@@ -53,16 +53,16 @@ const ESTADO_COLORS = {
 // ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    // 1. Cargar Configuración Global de forma segura
+    // 1. Cargar Configuración Global
     const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
-        FUENTES = Array.isArray(c.fuentes) ? c.fuentes : [];
-        PRODUCTOS = Array.isArray(c.productos) ? c.productos : [];
-        PRESUPUESTOS = Array.isArray(c.presupuestos) ? c.presupuestos : [];
+        FUENTES = Array.isArray(c.fuentes) && c.fuentes.length > 0 ? c.fuentes : FUENTES;
+        PRODUCTOS = Array.isArray(c.productos) && c.productos.length > 0 ? c.productos : PRODUCTOS;
+        PRESUPUESTOS = Array.isArray(c.presupuestos) && c.presupuestos.length > 0 ? c.presupuestos : PRESUPUESTOS;
         RESPONSABLES = Array.isArray(c.responsables) && c.responsables.length > 0 ? c.responsables : RESPONSABLES;
         EJECUTIVOS = Array.isArray(c.ejecutives) && c.ejecutives.length > 0 ? c.ejecutives : EJECUTIVOS;
       }
@@ -94,12 +94,7 @@ async function guardarConfiguracionEnSupabase() {
     };
     await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
       method: 'PATCH',
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
+      headers: supabaseHeaders,
       body: JSON.stringify(payload)
     });
   } catch (e) {
@@ -109,41 +104,44 @@ async function guardarConfiguracionEnSupabase() {
 
 async function guardarLeadEnSupabase(lead, isNew = false) {
   try {
+    // Mapeo seguro para que coincida exactamente con las columnas en minúsculas de la BD
+    const payload = {
+      nombre: lead.nombre,
+      empresa: lead.empresa,
+      telefono: lead.telefono,
+      correo: lead.correo,
+      puesto: lead.puesto,
+      estado_geo: lead.estado_geo,
+      pais: lead.pais || 'México',
+      fuente: lead.fuente,
+      producto: lead.producto,
+      presupuesto: lead.presupuesto,
+      responsable: lead.responsable,
+      ejecutivo: lead.ejecutivo,
+      monto: lead.monto,
+      estado: lead.estado,
+      prioridad: lead.prioridad,
+      proximoseg: lead.proximoseg, // Compatible con base de datos
+      notas: lead.notas
+    };
+
     if (isNew) {
-      const { id, ...leadData } = lead; 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
-        headers: {
-          ...supabaseHeaders,
-          "Prefer": "return=representation" // 🔥 Obliga a Supabase a retornar el ID asignado
-        },
-        body: JSON.stringify(leadData)
+        headers: supabaseHeaders,
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const datosInsertados = await res.json();
         if (datosInsertados && datosInsertados.length > 0) {
           lead.id = datosInsertados[0].id; 
         }
-      } else {
-        const errorText = await res.text();
-        console.error("❌ Error en respuesta de Supabase:", errorText);
       }
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
         method: 'PATCH',
         headers: supabaseHeaders,
-        body: JSON.stringify(lead)
-      });
-    }
-  } catch (error) {
-    console.error("❌ Error sincronizando lead en Supabase:", error);
-  }
-}
-    } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
-        method: 'PATCH',
-        headers: supabaseHeaders,
-        body: JSON.stringify(lead)
+        body: JSON.stringify(payload)
       });
     }
   } catch (error) {
@@ -172,7 +170,7 @@ function handleLogin() {
   const adminMatch = Array.isArray(ADMINS) && ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
 
   if (rootMatch || adminMatch) {
-    err.style.display = 'none';
+    if (err) err.style.display = 'none';
     sessionStorage.setItem('crm_logged_in', 'true');
     sessionStorage.setItem('crm_user', u);
     document.getElementById('login-container').style.display = 'none';
@@ -180,8 +178,10 @@ function handleLogin() {
     renderDashboard();
     verificarRecordatoriosSeguimiento();
   } else {
-    err.style.display = 'block';
-    err.innerText = "Usuario o contraseña incorrectos.";
+    if (err) {
+      err.style.display = 'block';
+      err.innerText = "Usuario o contraseña incorrectos.";
+    }
   }
 }
 
@@ -191,7 +191,6 @@ function handleLogout() {
   location.reload();
 }
 
-// ─── SEGURIDAD CONTRASEÑA MAESTRA ─────────────────────────────────────────────
 function checkPasswordPrompt(actionName) {
   const p = prompt(`Para "${actionName}", por favor introduce la contraseña del Administrador Maestro:`);
   if (p === null) return false;
@@ -200,7 +199,7 @@ function checkPasswordPrompt(actionName) {
   return false;
 }
 
-// ─── NAVEGACIÓN (TABS) ────────────────────────────────────────────────────────
+// ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
 function switchTab(tabId, el) {
   ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'].forEach(t => {
     const section = document.getElementById(`tab-${t}`);
@@ -216,7 +215,6 @@ function switchTab(tabId, el) {
   if (tabId === 'config') renderConfig();
 }
 
-// ─── INTERFAZ NOTIFICACIONES Y MODALES ORIGINALES ─────────────────────────────
 function notify(text) {
   const n = document.getElementById('notification');
   if (n) {
@@ -231,13 +229,12 @@ function openNewLead() {
   document.getElementById('panel-title').innerText = "Nuevo Lead";
   document.getElementById('btn-delete-lead').style.display = 'none';
 
-  // Limpiar campos formulario original
   document.getElementById('n-nombre').value = '';
   document.getElementById('n-empresa').value = '';
   document.getElementById('n-telefono').value = '';
   document.getElementById('n-correo').value = '';
   document.getElementById('n-puesto').value = '';
-  document.getElementById('n-monto').value = '';
+  document.getElementById('n-monto').value = '0';
   document.getElementById('n-seg').value = '';
   document.getElementById('n-notas').value = '';
   document.getElementById('n-estado').value = '';
@@ -261,8 +258,12 @@ function openEditLead(id) {
   document.getElementById('n-telefono').value = l.telefono || '';
   document.getElementById('n-correo').value = l.correo || '';
   document.getElementById('n-puesto').value = l.puesto || '';
-  document.getElementById('n-monto').value = l.monto || '';
-  document.getElementById('n-seg').value = (l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
+  document.getElementById('n-monto').value = l.monto || 0;
+  
+  // Soporte tanto para la clave vieja como para la nueva en minúsculas
+  const progSeg = l.proximoseg || l.proximoSeg || '';
+  document.getElementById('n-seg').value = (progSeg && typeof progSeg === 'string') ? progSeg.substring(0,16) : '';
+  
   document.getElementById('n-notas').value = l.notas || '';
   document.getElementById('n-estado').value = l.estado_geo || '';
 
@@ -311,7 +312,7 @@ function populateSelects() {
   if(pri) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
 }
 
-// ─── ACCIONES SOBRE LEADS CON SOPORTE ASÍNCRONO ─────────────────────────────────
+// ─── ACCIONES SOBRE LEADS ─────────────────────────────────────────────────────
 async function saveLead() {
   const nombre = document.getElementById('n-nombre').value.trim();
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
@@ -332,36 +333,28 @@ async function saveLead() {
     monto: parseFloat(document.getElementById('n-monto').value) || 0,
     estado: document.getElementById('n-situacion').value,
     prioridad: document.getElementById('n-prioridad').value,
-    proximoSeg: document.getElementById('n-seg').value,
-    notas: document.getElementById('n-notas').value.trim(),
-    fechaActualizacion: new Date().toISOString()
+    proximoseg: document.getElementById('n-seg').value,
+    notas: document.getElementById('n-notas').value.trim()
   };
 
   if (editingLeadId !== null) {
     l.id = editingLeadId;
     const idx = LEADS.findIndex(x => x.id === editingLeadId);
     if (idx !== -1) {
-      l.fechaCreacion = LEADS[idx].fechaCreacion;
       LEADS[idx] = l;
     }
     await guardarLeadEnSupabase(l, false);
     editingLeadId = null;
     notify('🔄 Lead actualizado correctamente');
   } else {
-    l.fechaCreacion = new Date().toISOString();
     LEADS.push(l);
     await guardarLeadEnSupabase(l, true);
     notify('✅ Lead creado exitosamente');
   }
 
   togglePanel(false);
-  
-  const activeTab = document.querySelector('.tab.active');
-  if (activeTab) {
-    if (activeTab.innerText.includes('Dashboard')) renderDashboard();
-    if (activeTab.innerText.includes('Todos')) renderLeadsTable();
-    if (activeTab.innerText.includes('Seguimiento')) renderSeguimiento();
-  }
+  await cargarDatosDesdeSupabase(); // Recarga limpia desde la nube
+  renderDashboard();
 }
 
 async function eliminarLeadActual() {
@@ -375,26 +368,19 @@ async function eliminarLeadActual() {
 
   togglePanel(false);
   editingLeadId = null;
-
-  const activeTab = document.querySelector('.tab.active');
-  if (activeTab) {
-    if (activeTab.innerText.includes('Dashboard')) renderDashboard();
-    if (activeTab.innerText.includes('Todos')) renderLeadsTable();
-    if (activeTab.innerText.includes('Seguimiento')) renderSeguimiento();
-  }
+  renderDashboard();
   notify('🗑 Lead eliminado de la base de datos');
 }
 
-// ─── RENDERS DE PANELES Y COMPONENTES VISUALES ORIGINALES ─────────────────────
-// 🔥 BLINDADO COMPLETO CONTRA PROPIEDADES INDEFINIDAS O TABLAS CONFIG EN BLANCO
+// ─── RENDERS VISUALES ORIGINALES COMPLETAMENTE BLINDADOS ──────────────────────
 function renderDashboard() {
   const container = document.getElementById('tab-dashboard');
   if (!container) return;
   
   const totalLeads = Array.isArray(LEADS) ? LEADS.length : 0;
-  const totalMonto = Array.isArray(LEADS) ? LEADS.reduce((acc, l) => acc + (l.monto || 0), 0) : 0;
+  const totalMonto = Array.isArray(LEADS) ? LEADS.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0) : 0;
   const ganados = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === 'Cerrado Ganado') : [];
-  const montoGanado = ganados.reduce((acc, l) => acc + (l.monto || 0), 0);
+  const montoGanado = ganados.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0);
 
   let html = `
     <div class="metrics-grid">
@@ -421,7 +407,7 @@ function renderDashboard() {
 
   ESTADOS.forEach(est => {
     const leadsEnEstado = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === est) : [];
-    const subtotal = leadsEnEstado.reduce((acc, l) => acc + (l.monto || 0), 0);
+    const subtotal = leadsEnEstado.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0);
     
     html += `
       <div class="kanban-column">
@@ -440,7 +426,7 @@ function renderDashboard() {
           ${l.empresa ? `<div style="font-size:11px; color:var(--text2); margin-bottom:6px;"><i class="ti ti-building" style="font-size:12px;"></i> ${l.empresa}</div>` : ''}
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
             <span class="badge ${PRI_CLASS[l.prioridad] || 'b-media'}">${l.prioridad || 'Media'}</span>
-            <span style="font-weight:700; font-size:12px;">$${(l.monto || 0).toLocaleString('es-MX')}</span>
+            <span style="font-weight:700; font-size:12px;">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</span>
           </div>
         </div>
       `;
@@ -496,7 +482,7 @@ function renderLeadsTable() {
         <td>${l.fuente || '—'}</td>
         <td>${l.producto || '—'}</td>
         <td>${l.responsable || '—'}</td>
-        <td style="font-weight:700;">$${(l.monto || 0).toLocaleString('es-MX')}</td>
+        <td style="font-weight:700;">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</td>
         <td><span class="badge ${STATUS_CLASS[l.estado] || 'b-nuevo'}">${l.estado || 'Nuevo'}</span></td>
         <td><span class="badge ${PRI_CLASS[l.prioridad] || 'b-media'}">${l.prioridad || 'Media'}</span></td>
       </tr>
@@ -533,22 +519,32 @@ function renderSeguimiento() {
   if (!container) return;
   const hoy = new Date();
 
-  const vencidos = LEADS.filter(l => l.proximoSeg && new Date(l.proximoSeg) < hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado');
+  const vencidos = LEADS.filter(l => {
+    const s = l.proximoseg || l.proximoSeg;
+    return s && new Date(s) < hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
+  });
+  
   const paraHoy = LEADS.filter(l => {
-    if (!l.proximoSeg) return false;
-    const f = new Date(l.proximoSeg);
+    const s = l.proximoseg || l.proximoSeg;
+    if (!s) return false;
+    const f = new Date(s);
     return f.toDateString() === hoy.toDateString() && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
   });
-  const futuros = LEADS.filter(l => l.proximoSeg && new Date(l.proximoSeg) > hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado');
+  
+  const futuros = LEADS.filter(l => {
+    const s = l.proximoseg || l.proximoSeg;
+    return s && new Date(s) > hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
+  });
 
   let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">`;
 
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:#E24B4A; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-alert-triangle"></i> Vencidos (${vencidos.length})</h3>`;
   vencidos.forEach(l => {
+    const s = l.proximoseg || l.proximoSeg;
     html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
       <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:#E24B4A; margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(l.proximoSeg).toLocaleString('es-MX')}</div>
+      <div style="font-size:11px; color:#E24B4A; margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
     </div>`;
   });
   html += `</div>`;
@@ -556,9 +552,10 @@ function renderSeguimiento() {
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:var(--green); margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-clock"></i> Programados Hoy (${paraHoy.length})</h3>`;
   paraHoy.forEach(l => {
+    const s = l.proximoseg || l.proximoSeg;
     html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
       <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:var(--green); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(l.proximoSeg).toLocaleString('es-MX')}</div>
+      <div style="font-size:11px; color:var(--green); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
     </div>`;
   });
   html += `</div>`;
@@ -566,9 +563,10 @@ function renderSeguimiento() {
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:#378ADD; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-calendar-time"></i> Siguientes Días (${futuros.length})</h3>`;
   futuros.forEach(l => {
+    const s = l.proximoseg || l.proximoSeg;
     html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
       <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:var(--text2); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(l.proximoSeg).toLocaleString('es-MX')}</div>
+      <div style="font-size:11px; color:var(--text2); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
     </div>`;
   });
   html += `</div></div>`;
@@ -589,7 +587,7 @@ function renderReportes() {
   const porEjecutivo = {};
   LEADS.forEach(l => {
     const e = l.ejecutivo || 'Sin ejecutivo';
-    porEjecutivo[e] = (porEjecutivo[e] || 0) + (l.monto || 0);
+    porEjecutivo[e] = (porEjecutivo[e] || 0) + (parseFloat(l.monto) || 0);
   });
 
   let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:16px;">`;
@@ -699,7 +697,7 @@ function renderConfig() {
   container.innerHTML = html;
 }
 
-// ─── ACCIONES DE CONFIGURACIÓN CON PERSISTENCIA EN NUBE ───────────────────────
+// ─── ACCIONES DE CONFIGURACIÓN ────────────────────────────────────────────────
 async function addConfigItem(tipo) {
   const input = document.getElementById(`in-${tipo}`);
   const valor = input?.value.trim();
@@ -764,7 +762,7 @@ async function saveAdminUser() {
       return;
     }
     ADMINS.push({ user: userVal, pass: passVal });
-    notify('➕ Administrador añadió');
+    notify('➕ Administrador añadido');
   }
 
   if (userEl) userEl.value = ''; 
@@ -787,12 +785,12 @@ async function removeAdminUser(index) {
   notify('🗑 Administrador eliminado del sistema');
 }
 
-// ─── ALERTAS DE SEGUIMIENTO DIARIO ORIGINALES ─────────────────────────────────
 function verificarRecordatoriosSeguimiento() {
   const hoyStr = new Date().toDateString();
   const hoyLeads = Array.isArray(LEADS) ? LEADS.filter(l => {
-    if (!l.proximoSeg) return false;
-    return new Date(l.proximoSeg).toDateString() === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
+    const s = l.proximoseg || l.proximoSeg;
+    if (!s) return false;
+    return new Date(s).toDateString() === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
   }) : [];
 
   if (hoyLeads.length > 0) {
@@ -802,7 +800,7 @@ function verificarRecordatoriosSeguimiento() {
   }
 }
 
-// ─── INICIALIZADOR ASÍNCRONO DEL WINDOW.ONLOAD ────────────────────────────────
+// ─── INICIALIZADOR DEL CRM ────────────────────────────────────────────────────
 window.onload = async function() {
   await cargarDatosDesdeSupabase();
 

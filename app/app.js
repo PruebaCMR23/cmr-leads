@@ -4,7 +4,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // CREDENCIALES EXCLUSIVAS ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
-const AUTH_PASS = "Saludable*"; // 🔥 
+const AUTH_PASS = "Saludable*"; 
 
 // Arreglos globales dinámicos que se sincronizan con Supabase
 let ADMINS = [];
@@ -33,40 +33,55 @@ const supabaseHeaders = {
   "Prefer": "return=representation"
 };
 
+// ARRAYS ESTÁTICOS ORIGINALES COMPLETAMENTE INTACTOS
+const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
+const PRIORIDADES = ['Alta', 'Media', 'Baja'];
+
+const STATUS_CLASS = {
+  'Nuevo': 'b-nuevo', 'Contactado': 'b-contactado', 'Calificado': 'b-calificado',
+  'Propuesta Enviada': 'b-propuesta', 'En Negociación': 'b-negociacion',
+  'Cerrado Ganado': 'b-cerrado', 'Cerrado Perdido': 'b-perdido', 'Abandonado': 'b-abandonado'
+};
+const PRI_CLASS = { 'Alta': 'b-alta', 'Media': 'b-media', 'Baja': 'b-baja' };
+const BAR_COLORS = ['#378ADD', '#1D9E75', '#D85A30', '#D4537E', '#7F77DD', '#639922', '#BA7517', '#E24B4A', '#888780', '#0F6E56'];
+const ESTADO_COLORS = {
+  'Nuevo': '#378ADD', 'Contactado': '#7F77DD', 'Calificado': '#639922',
+  'Propuesta Enviada': '#BA7517', 'En Negociación': '#D4537E',
+  'Cerrado Ganado': '#1D9E75', 'Cerrado Perdido': '#E24B4A', 'Abandonado': '#888780'
+};
+
+// ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    // 1. Cargar Configuración Global
+    // 1. Cargar Configuración Global de forma segura
     const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { headers: supabaseHeaders });
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
-        // Forzamos a que si no hay datos, se asigne un arreglo vacío [] en lugar de quedarse como undefined
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
         FUENTES = Array.isArray(c.fuentes) ? c.fuentes : [];
         PRODUCTOS = Array.isArray(c.productos) ? c.productos : [];
         PRESUPUESTOS = Array.isArray(c.presupuestos) ? c.presupuestos : [];
-        RESPONSABLES = Array.isArray(c.responsables) ? c.responsables : RESPONSABLES;
-        EJECUTIVOS = Array.isArray(c.ejecutives) ? c.ejecutives : EJECUTIVOS;
+        RESPONSABLES = Array.isArray(c.responsables) && c.responsables.length > 0 ? c.responsables : RESPONSABLES;
+        EJECUTIVOS = Array.isArray(c.ejecutives) && c.ejecutives.length > 0 ? c.ejecutives : EJECUTIVOS;
       }
     }
 
-    // 2. Cargar Todos los Leads de forma segura (AQUÍ ESTÁ EL CAMBIO)
+    // 2. Cargar Todos los Leads de forma segura
     const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, { headers: supabaseHeaders });
     if (resLeads.ok) {
       const dataLeads = await resLeads.json();
-      // Si viene una lista real la asigna; si viene vacía o con error pone un arreglo limpio []
       LEADS = Array.isArray(dataLeads) ? dataLeads : []; 
     } else {
-      // Si la petición falla (ej. error de red o tabla no encontrada), evita que se rompa asignando una lista vacía
       LEADS = [];
     }
-
   } catch (error) {
     console.error("❌ Error cargando datos iniciales de Supabase:", error);
-    LEADS = []; // Respaldo por si ocurre un fallo crítico en el try
+    LEADS = [];
   }
 }
+
 async function guardarConfiguracionEnSupabase() {
   try {
     const payload = {
@@ -79,7 +94,12 @@ async function guardarConfiguracionEnSupabase() {
     };
     await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
       method: 'PATCH',
-      headers: supabaseHeaders,
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
       body: JSON.stringify(payload)
     });
   } catch (e) {
@@ -90,7 +110,6 @@ async function guardarConfiguracionEnSupabase() {
 async function guardarLeadEnSupabase(lead, isNew = false) {
   try {
     if (isNew) {
-      // Dejamos que el ID se autogenere en Supabase gracias a IDENTITY
       const { id, ...leadData } = lead; 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
@@ -119,141 +138,10 @@ async function eliminarLeadDeSupabase(id) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, {
       method: 'DELETE',
-      headers: supabaseHeaders
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
     });
   } catch (error) {
     console.error("❌ Error eliminando lead de Supabase:", error);
-  }
-}
-
-// [El resto de tus funciones de renderizado del CRM se mantienen idénticas aquí...]
-// Asegúrate de usar la línea corregida para el substring en openEditLead:
-// document.getElementById('n-seg').value = (l && l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
-
-// ─── INICIALIZADOR ASÍNCRONO FIX (WINDOW.ONLOAD) ──────────────────────────────
-window.onload = async function() {
-  // 1. Forzar la descarga completa antes de renderizar nada visual
-  await cargarDatosDesdeSupabase();
-
-  // 2. Validar sesión e inicializar la vista con los datos ya cargados
-  if (sessionStorage.getItem('crm_logged_in') === 'true') {
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('main-layout').style.display = 'block';
-    renderDashboard();
-    verificarRecordatoriosSeguimiento();
-  } else {
-    document.getElementById('login-container').style.display = 'flex';
-    document.getElementById('main-layout').style.display = 'none';
-  }
-};
-
-// ARRAYS ESTÁTICOS ORIGINALES COMPLETAMENTE INTACTOS
-const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
-const PRIORIDADES = ['Alta', 'Media', 'Baja'];
-
-const STATUS_CLASS = {
-  'Nuevo': 'b-nuevo', 'Contactado': 'b-contactado', 'Calificado': 'b-calificado',
-  'Propuesta Enviada': 'b-propuesta', 'En Negociación': 'b-negociacion',
-  'Cerrado Ganado': 'b-cerrado', 'Cerrado Perdido': 'b-perdido', 'Abandonado': 'b-abandonado'
-};
-const PRI_CLASS = { 'Alta': 'b-alta', 'Media': 'b-media', 'Baja': 'b-baja' };
-const BAR_COLORS = ['#378ADD', '#1D9E75', '#D85A30', '#D4537E', '#7F77DD', '#639922', '#BA7517', '#E24B4A', '#888780', '#0F6E56'];
-const ESTADO_COLORS = {
-  'Nuevo': '#378ADD', 'Contactado': '#7F77DD', 'Calificado': '#639922',
-  'Propuesta Enviada': '#BA7517', 'En Negociación': '#D4537E',
-  'Cerrado Ganado': '#1D9E75', 'Cerrado Perdido': '#E24B4A', 'Abandonado': '#888780'
-};
-
-// ─── FUNCIONES DE CONEXIÓN ASÍNCRONA (REST API) ─────────────────────────────────
-async function cargarDatosDesdeSupabase() {
-  try {
-    const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    const dataConfig = await resConfig.json();
-    if (dataConfig && dataConfig.length > 0) {
-      const config = dataConfig[0];
-      ADMINS = config.admins || [];
-      FUENTES = config.fuentes || [];
-      PRODUCTOS = config.productos || [];
-      PRESUPUESTOS = config.presupuestos || [];
-      if (config.responsables && config.responsables.length > 0) RESPONSABLES = config.responsables;
-      if (config.ejecutives && config.ejecutives.length > 0) EJECUTIVOS = config.ejecutives;
-    }
-
-    const resLeads = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=id.asc`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-    LEADS = await resLeads.json();
-  } catch (err) {
-    console.error("Error cargando datos de Supabase:", err);
-  }
-}
-
-async function guardarConfiguracionEnSupabase() {
-  try {
-    const payload = {
-      admins: ADMINS,
-      fuentes: FUENTES,
-      productos: PRODUCTOS,
-      presupuestos: PRESUPUESTOS,
-      responsables: RESPONSABLES,
-      ejecutives: EJECUTIVOS
-    };
-    await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
-      method: 'PATCH',
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: JSON.stringify(payload)
-    });
-  } catch (err) {
-    console.error("Error guardando configuración en Supabase:", err);
-  }
-}
-
-async function guardarLeadEnSupabase(leadData, esNuevo = false) {
-  try {
-    const headers = {
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation"
-    };
-
-    if (esNuevo) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(leadData)
-      });
-      const nuevoLeadGuardado = await res.json();
-      if (nuevoLeadGuardado && nuevoLeadGuardado.length > 0) {
-        leadData.id = nuevoLeadGuardado[0].id;
-      }
-    } else {
-      await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${leadData.id}`, {
-        method: 'PATCH',
-        headers: headers,
-        body: JSON.stringify(leadData)
-      });
-    }
-  } catch (err) {
-    console.error("Error guardando lead en Supabase:", err);
-  }
-}
-
-async function eliminarLeadDeSupabase(id) {
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, {
-      method: 'DELETE',
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
-    });
-  } catch (err) {
-    console.error("Error eliminando lead en Supabase:", err);
   }
 }
 
@@ -264,7 +152,7 @@ function handleLogin() {
   const err = document.getElementById('login-error');
 
   const rootMatch = (u.toLowerCase() === AUTH_USER.toLowerCase() && p === AUTH_PASS);
-  const adminMatch = ADMINS.some(a => a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
+  const adminMatch = Array.isArray(ADMINS) && ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
 
   if (rootMatch || adminMatch) {
     err.style.display = 'none';
@@ -286,6 +174,7 @@ function handleLogout() {
   location.reload();
 }
 
+// ─── SEGURIDAD CONTRASEÑA MAESTRA ─────────────────────────────────────────────
 function checkPasswordPrompt(actionName) {
   const p = prompt(`Para "${actionName}", por favor introduce la contraseña del Administrador Maestro:`);
   if (p === null) return false;
@@ -297,7 +186,8 @@ function checkPasswordPrompt(actionName) {
 // ─── NAVEGACIÓN (TABS) ────────────────────────────────────────────────────────
 function switchTab(tabId, el) {
   ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'].forEach(t => {
-    document.getElementById(`tab-${t}`).style.display = (t === tabId) ? 'block' : 'none';
+    const section = document.getElementById(`tab-${t}`);
+    if (section) section.style.display = (t === tabId) ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -312,9 +202,11 @@ function switchTab(tabId, el) {
 // ─── INTERFAZ NOTIFICACIONES Y MODALES ORIGINALES ─────────────────────────────
 function notify(text) {
   const n = document.getElementById('notification');
-  n.innerText = text;
-  n.classList.add('show');
-  setTimeout(() => n.classList.remove('show'), 3500);
+  if (n) {
+    n.innerText = text;
+    n.classList.add('show');
+    setTimeout(() => n.classList.remove('show'), 3500);
+  }
 }
 
 function openNewLead() {
@@ -340,7 +232,7 @@ function openNewLead() {
 function openEditLead(id) {
   editingLeadId = id;
   const l = LEADS.find(x => x.id === id);
-  if (!l) return; // 🔥 Esto evita que intente leer datos si el lead no existe o está dañado
+  if (!l) return; 
 
   document.getElementById('panel-title').innerText = "Editar Lead";
   document.getElementById('btn-delete-lead').style.display = 'inline-flex';
@@ -353,7 +245,7 @@ function openEditLead(id) {
   document.getElementById('n-correo').value = l.correo || '';
   document.getElementById('n-puesto').value = l.puesto || '';
   document.getElementById('n-monto').value = l.monto || '';
-  document.getElementById('n-seg').value = (l && l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
+  document.getElementById('n-seg').value = (l.proximoSeg && typeof l.proximoSeg === 'string') ? l.proximoSeg.substring(0,16) : '';
   document.getElementById('n-notas').value = l.notas || '';
   document.getElementById('n-estado').value = l.estado_geo || '';
 
@@ -393,13 +285,13 @@ function populateSelects() {
   const sit = document.getElementById('n-situacion');
   const pri = document.getElementById('n-prioridad');
 
-  f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
-  p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
-  ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(f) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(p) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(b) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(r) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(ej) ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(sit) sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(pri) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
 }
 
 // ─── ACCIONES SOBRE LEADS CON SOPORTE ASÍNCRONO ─────────────────────────────────
@@ -447,7 +339,6 @@ async function saveLead() {
 
   togglePanel(false);
   
-  // Refrescar vista activa actual de forma segura
   const activeTab = document.querySelector('.tab.active');
   if (activeTab) {
     if (activeTab.innerText.includes('Dashboard')) renderDashboard();
@@ -478,13 +369,14 @@ async function eliminarLeadActual() {
 }
 
 // ─── RENDERS DE PANELES Y COMPONENTES VISUALES ORIGINALES ─────────────────────
+// 🔥 BLINDADO COMPLETO CONTRA PROPIEDADES INDEFINIDAS O TABLAS CONFIG EN BLANCO
 function renderDashboard() {
   const container = document.getElementById('tab-dashboard');
+  if (!container) return;
   
-  // Agrupaciones Métricas CRM
-  const totalLeads = LEADS.length;
-  const totalMonto = LEADS.reduce((acc, l) => acc + (l.monto || 0), 0);
-  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado');
+  const totalLeads = Array.isArray(LEADS) ? LEADS.length : 0;
+  const totalMonto = Array.isArray(LEADS) ? LEADS.reduce((acc, l) => acc + (l.monto || 0), 0) : 0;
+  const ganados = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === 'Cerrado Ganado') : [];
   const montoGanado = ganados.reduce((acc, l) => acc + (l.monto || 0), 0);
 
   let html = `
@@ -511,7 +403,7 @@ function renderDashboard() {
   `;
 
   ESTADOS.forEach(est => {
-    const leadsEnEstado = LEADS.filter(l => l.estado === est);
+    const leadsEnEstado = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === est) : [];
     const subtotal = leadsEnEstado.reduce((acc, l) => acc + (l.monto || 0), 0);
     
     html += `
@@ -546,6 +438,7 @@ function renderDashboard() {
 
 function renderLeadsTable() {
   const container = document.getElementById('tab-leads');
+  if (!container) return;
 
   let html = `
     <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
@@ -558,7 +451,7 @@ function renderLeadsTable() {
       </select>
       <select id="filter-prioridad" onchange="filterLeadsTable()" style="padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text);">
         <option value="">🔥 Todas las prioridades</option>
-        ${PRI_SERIAL = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('')}
+        ${PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('')}
       </select>
     </div>
     <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); overflow-x:auto;">
@@ -620,9 +513,9 @@ function filterLeadsTable() {
 
 function renderSeguimiento() {
   const container = document.getElementById('tab-seguimiento');
+  if (!container) return;
   const hoy = new Date();
 
-  // Separar tareas
   const vencidos = LEADS.filter(l => l.proximoSeg && new Date(l.proximoSeg) < hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado');
   const paraHoy = LEADS.filter(l => {
     if (!l.proximoSeg) return false;
@@ -633,7 +526,6 @@ function renderSeguimiento() {
 
   let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">`;
 
-  // Columna Vencidos
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:#E24B4A; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-alert-triangle"></i> Vencidos (${vencidos.length})</h3>`;
   vencidos.forEach(l => {
@@ -644,7 +536,6 @@ function renderSeguimiento() {
   });
   html += `</div>`;
 
-  // Columna Hoy
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:var(--green); margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-clock"></i> Programados Hoy (${paraHoy.length})</h3>`;
   paraHoy.forEach(l => {
@@ -655,7 +546,6 @@ function renderSeguimiento() {
   });
   html += `</div>`;
 
-  // Columna Futuros
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
     <h3 style="color:#378ADD; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-calendar-time"></i> Siguientes Días (${futuros.length})</h3>`;
   futuros.forEach(l => {
@@ -671,15 +561,14 @@ function renderSeguimiento() {
 
 function renderReportes() {
   const container = document.getElementById('tab-reportes');
+  if (!container) return;
 
-  // Cálculo distribuciones por origen
   const porFuente = {};
   LEADS.forEach(l => {
     const f = l.fuente || 'No especificado';
     porFuente[f] = (porFuente[f] || 0) + 1;
   });
 
-  // Cálculo volumenes por ejecutivo
   const porEjecutivo = {};
   LEADS.forEach(l => {
     const e = l.ejecutivo || 'Sin ejecutivo';
@@ -688,10 +577,10 @@ function renderReportes() {
 
   let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:16px;">`;
 
-  // Gráfico Orígenes / Fuentes (Barras CSS Simples)
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
     <h3 style="margin-bottom:16px; font-size:14px;"><i class="ti ti-chart-pie"></i> Leads por Origen / Fuente</h3>`;
-  const maxFuente = Math.max(...Object.values(porFuente), 1);
+  const valuesFuente = Object.values(porFuente);
+  const maxFuente = valuesFuente.length > 0 ? Math.max(...valuesFuente, 1) : 1;
   Object.keys(porFuente).forEach((k, idx) => {
     const val = porFuente[k];
     const pct = (val / maxFuente) * 100;
@@ -707,10 +596,10 @@ function renderReportes() {
   });
   html += `</div>`;
 
-  // Gráfico Desempeño Financiero Ejecutivo
   html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
     <h3 style="margin-bottom:16px; font-size:14px;"><i class="ti ti-chart-bar"></i> Valor en Cartera por Ejecutivo</h3>`;
-  const maxEj = Math.max(...Object.values(porEjecutivo), 1);
+  const valuesEj = Object.values(porEjecutivo);
+  const maxEj = valuesEj.length > 0 ? Math.max(...valuesEj, 1) : 1;
   Object.keys(porEjecutivo).forEach((k, idx) => {
     const val = porEjecutivo[k];
     const pct = (val / maxEj) * 100;
@@ -730,15 +619,16 @@ function renderReportes() {
 
 function renderConfig() {
   const container = document.getElementById('tab-config');
+  if (!container) return;
 
   let html = `<div class="config-container">`;
 
-  // Helper render cajas configuración
   const makeBox = (title, tipo, lista) => {
+    const listaValida = Array.isArray(lista) ? lista : [];
     let bHtml = `<div class="config-box">
       <h3>${title}</h3>
       <div class="config-tags-wrapper">`;
-    lista.forEach(x => {
+    listaValida.forEach(x => {
       bHtml += `<span class="config-tag">${x} <button onclick="removeConfigItem('${tipo}','${x}')">×</button></span>`;
     });
     bHtml += `</div>
@@ -756,7 +646,7 @@ function renderConfig() {
   html += makeBox('🏢 Áreas Responsables', 'responsable', RESPONSABLES);
   html += makeBox('👥 Equipo de Ejecutivos de Venta', 'ejecutivo', EJECUTIVOS);
 
-  // Módulo de Cuentas Administradores Secundarios
+  const adminsValidos = Array.isArray(ADMINS) ? ADMINS : [];
   html += `<div class="config-box">
     <h3><i class="ti ti-users-lock"></i> Cuentas de Administradores Secundarios</h3>
     <div style="overflow-x:auto; margin-bottom:12px;">
@@ -769,15 +659,17 @@ function renderConfig() {
           </tr>
         </thead>
         <tbody>`;
-  ADMINS.forEach((adm, i) => {
-    html += `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px; font-weight:600;">${adm.user}</td>
-      <td style="padding:6px; color:var(--text3)">••••••••</td>
-      <td style="padding:6px; text-align:right;">
-        <button onclick="editAdminUserClick(${i})" style="background:none; border:none; color:#378ADD; cursor:pointer; margin-right:8px;"><i class="ti ti-edit"></i></button>
-        <button onclick="removeAdminUser(${i})" style="background:none; border:none; color:#E24B4A; cursor:pointer;"><i class="ti ti-trash"></i></button>
-      </td>
-    </tr>`;
+  adminsValidos.forEach((adm, i) => {
+    if (adm && adm.user) {
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px; font-weight:600;">${adm.user}</td>
+        <td style="padding:6px; color:var(--text3)">••••••••</td>
+        <td style="padding:6px; text-align:right;">
+          <button onclick="editAdminUserClick(${i})" style="background:none; border:none; color:#378ADD; cursor:pointer; margin-right:8px;"><i class="ti ti-edit"></i></button>
+          <button onclick="removeAdminUser(${i})" style="background:none; border:none; color:#E24B4A; cursor:pointer;"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>`;
+    }
   });
   html += `</tbody></table></div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -802,7 +694,7 @@ async function addConfigItem(tipo) {
   if (tipo === 'responsable' && !RESPONSABLES.includes(valor)) RESPONSABLES.push(valor);
   if (tipo === 'ejecutivo' && !EJECUTIVOS.includes(valor)) EJECUTIVOS.push(valor);
 
-  input.value = '';
+  if (input) input.value = '';
   await guardarConfiguracionEnSupabase();
   renderConfig();
   notify('✨ Opción agregada correctamente');
@@ -824,9 +716,11 @@ async function removeConfigItem(tipo, valor) {
 
 function editAdminUserClick(index) {
   editingAdminIndex = index;
-  document.getElementById('cfg-admin-user').value = ADMINS[index].user;
-  document.getElementById('cfg-admin-pass').value = ADMINS[index].pass;
-  document.getElementById('btn-save-admin').innerText = "Modificar";
+  if(ADMINS[index]) {
+    document.getElementById('cfg-admin-user').value = ADMINS[index].user || '';
+    document.getElementById('cfg-admin-pass').value = ADMINS[index].pass || '';
+    document.getElementById('btn-save-admin').innerText = "Modificar";
+  }
 }
 
 async function saveAdminUser() {
@@ -848,15 +742,16 @@ async function saveAdminUser() {
     document.getElementById('btn-save-admin').innerText = "Guardar";
     notify('🔄 Cuenta de administrador modificada');
   } else {
-    if (ADMINS.some(a => a.user.toLowerCase() === userVal.toLowerCase())) {
+    if (ADMINS.some(a => a && a.user && a.user.toLowerCase() === userVal.toLowerCase())) {
       alert('❌ El usuario ya existe.');
       return;
     }
     ADMINS.push({ user: userVal, pass: passVal });
-    notify('➕ Administrador añadido');
+    notify('➕ Administrador añadió');
   }
 
-  userEl.value = ''; passEl.value = '';
+  if (userEl) userEl.value = ''; 
+  if (passEl) passEl.value = '';
   await guardarConfiguracionEnSupabase();
   renderConfig();
 }
@@ -878,10 +773,10 @@ async function removeAdminUser(index) {
 // ─── ALERTAS DE SEGUIMIENTO DIARIO ORIGINALES ─────────────────────────────────
 function verificarRecordatoriosSeguimiento() {
   const hoyStr = new Date().toDateString();
-  const hoyLeads = LEADS.filter(l => {
+  const hoyLeads = Array.isArray(LEADS) ? LEADS.filter(l => {
     if (!l.proximoSeg) return false;
     return new Date(l.proximoSeg).toDateString() === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
-  });
+  }) : [];
 
   if (hoyLeads.length > 0) {
     setTimeout(() => {
@@ -892,7 +787,6 @@ function verificarRecordatoriosSeguimiento() {
 
 // ─── INICIALIZADOR ASÍNCRONO DEL WINDOW.ONLOAD ────────────────────────────────
 window.onload = async function() {
-  // Primero descargamos de Supabase de forma transparente
   await cargarDatosDesdeSupabase();
 
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
@@ -900,5 +794,8 @@ window.onload = async function() {
     document.getElementById('main-layout').style.display = 'block';
     renderDashboard();
     verificarRecordatoriosSeguimiento();
+  } else {
+    document.getElementById('login-container').style.display = 'flex';
+    document.getElementById('main-layout').style.display = 'none';
   }
 };

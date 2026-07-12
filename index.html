@@ -10,6 +10,7 @@
 </head>
 <body>
 
+  <!-- PANTALLA DE ACCESO / LOGIN -->
   <div id="login-container" class="login-wrapper">
     <div class="login-card">
       <div class="login-logo"><i class="ti ti-lock"></i></div>
@@ -30,6 +31,7 @@
     </div>
   </div>
 
+  <!-- INTERFAZ PRINCIPAL DEL CRM -->
   <div id="main-layout" class="layout" style="display:none;">
     <div class="top-bar">
       <div class="top-title">
@@ -51,6 +53,7 @@
       <div class="tab" onclick="switchTab('config',this)"><i class="ti ti-settings"></i> Configuración</div>
     </div>
 
+    <!-- PESTAÑA 1: DASHBOARD -->
     <div id="tab-dashboard">
       <div class="metrics-row">
         <div class="metric-card">
@@ -136,6 +139,7 @@
       </div>
     </div>
 
+    <!-- PESTAÑA 2: TODOS LOS LEADS -->
     <div id="tab-leads" style="display:none;">
       <div class="filter-box">
         <input type="text" id="f-search" placeholder="🔍 Buscar nombre, empresa, teléfono..." oninput="filtrarTodosLosLeads()">
@@ -170,8 +174,10 @@
       </div>
     </div>
 
+    <!-- PESTAÑA 3: SEGUIMIENTO -->
     <div id="tab-seguimiento" style="display:none;">
       <div class="seg-container">
+        <!-- Vencidos -->
         <div class="seg-header text-red"><i class="ti ti-alert-triangle"></i> Vencidos (<span id="count-vencidos">0</span>)</div>
         <div class="table-container-box" style="margin-bottom:20px;">
           <div style="overflow-x:auto;">
@@ -186,6 +192,7 @@
           </div>
         </div>
 
+        <!-- Para Hoy -->
         <div class="seg-header text-orange"><i class="ti ti-calendar"></i> Para hoy (<span id="count-hoy">0</span>)</div>
         <div class="table-container-box" style="margin-bottom:20px;">
           <div style="overflow-x:auto;">
@@ -200,6 +207,7 @@
           </div>
         </div>
 
+        <!-- Próximos 14 Días -->
         <div class="seg-header text-blue"><i class="ti ti-calendar-time"></i> Próximos 14 días (<span id="count-futuros">0</span>)</div>
         <div class="table-container-box">
           <div style="overflow-x:auto;">
@@ -216,6 +224,7 @@
       </div>
     </div>
 
+    <!-- PESTAÑA 4: REPORTES -->
     <div id="tab-reportes" style="display:none;">
       <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
         <div class="metric-card">
@@ -252,8 +261,10 @@
       </div>
     </div>
 
+    <!-- PESTAÑA 5: CONFIGURACIÓN -->
     <div id="tab-config" style="display:none;">
       <div class="config-container">
+        <!-- Fuentes -->
         <div class="config-box">
           <h3><i class="ti ti-world"></i> Fuente *</h3>
           <div id="cfg-wrap-fuente" class="config-tags-wrapper"></div>
@@ -262,6 +273,7 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('fuente')">Agregar</button>
           </div>
         </div>
+        <!-- Productos -->
         <div class="config-box">
           <h3><i class="ti ti-package"></i> Producto de interés</h3>
           <div id="cfg-wrap-producto" class="config-tags-wrapper"></div>
@@ -270,6 +282,7 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('producto')">Agregar</button>
           </div>
         </div>
+        <!-- Presupuestos -->
         <div class="config-box">
           <h3><i class="ti ti-coin"></i> Presupuesto estimado</h3>
           <div id="cfg-wrap-presupuesto" class="config-tags-wrapper"></div>
@@ -278,22 +291,16 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('presupuesto')">Agregar</button>
           </div>
         </div>
+        <!-- Estado del Pipeline -->
         <div class="config-box">
-          <h3><i class="ti ti-users-group"></i> Responsable comercial</h3>
-          <div id="cfg-wrap-responsable" class="config-tags-wrapper"></div>
+          <h3><i class="ti ti-route"></i> Estado del Pipeline</h3>
+          <div id="cfg-wrap-estado" class="config-tags-wrapper"></div>
           <div style="display:flex; gap:8px;">
-            <input type="text" id="cfg-in-responsable" placeholder="Nuevo departamento">
-            <button class="btn btn-primary" onclick="agregarConfigTag('responsable')">Agregar</button>
+            <input type="text" id="cfg-in-estado" placeholder="Nuevo estado de pipeline">
+            <button class="btn btn-primary" onclick="agregarConfigTag('estado')">Agregar</button>
           </div>
         </div>
-        <div class="config-box">
-          <h3><i class="ti ti-id-badge"></i> Ejecutivo asignado</h3>
-          <div id="cfg-wrap-ejecutivo" class="config-tags-wrapper"></div>
-          <div style="display:flex; gap:8px;">
-            <input type="text" id="cfg-in-ejecutivo" placeholder="Nombre completo - departamento">
-            <button class="btn btn-primary" onclick="agregarConfigTag('ejecutivo')">Agregar</button>
-          </div>
-        </div>
+        <!-- Credenciales de Usuarios -->
         <div class="config-box">
           <h3><i class="ti ti-shield-lock"></i> Usuario y contraseña incluyendo el principal</h3>
           <div class="form-group" style="margin-top:10px;">
@@ -308,15 +315,15 @@
             </div>
           </div>
           <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
-          <h4>Cuentas Adicionales de Administradores</h4>
+          <h4>Lista de Todos los Usuarios Habilitados</h4>
           <div style="overflow-x:auto; margin-top:10px;">
             <table class="crm-table">
-              <thead><tr><th>Usuario</th><th>Contraseña</th><th>Acción</th></tr></thead>
+              <thead><tr><th>Usuario</th><th>Contraseña / Tipo</th><th>Acción</th></tr></thead>
               <tbody id="cfg-table-admins"></tbody>
             </table>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:12px; align-items:end;">
-            <div class="form-group" style="margin-bottom:0;"><label>Usuario</label><input type="text" id="cfg-add-user"></div>
+            <div class="form-group" style="margin-bottom:0;"><label>Usuario Nuevo</label><input type="text" id="cfg-add-user"></div>
             <div class="form-group" style="margin-bottom:0;"><label>Contraseña</label><input type="password" id="cfg-add-pass"></div>
             <button class="btn btn-primary" onclick="agregarAdminUser()">Añadir Cuenta</button>
           </div>
@@ -325,6 +332,7 @@
     </div>
   </div>
 
+  <!-- PANEL LATERAL FLOTANTE -->
   <div class="overlay" id="overlay" onclick="closePanel(event)">
     <div class="panel-lateral" id="panel">
       <div class="panel-header">

@@ -208,110 +208,106 @@
     </div>
   </div>
 
-  <div class="overlay" id="overlay" onclick="closePanel(event)"></div>
-  <div class="panel" id="panel">
-    <button class="panel-close" onclick="togglePanel(false)"><i class="ti ti-x"></i></button>
-    <h2 class="panel-title" id="panel-title-text">Nuevo Lead / Registro</h2>
+  <div id="overlay" onclick="togglePanel(false)"></div>
 
-    <div class="section-sep"><i class="ti ti-user"></i> Información General del Prospecto</div>
-    <input type="hidden" id="n-id">
-    <div class="form-group">
-      <label>Nombre del Cliente *</label>
-      <input type="text" id="n-nombre" placeholder="Ej. Miguel Sarmiento" required>
+  <div id="panel" class="panel-lateral">
+    <div class="panel-header">
+      <h2 id="panel-title"><i class="ti ti-user-plus"></i> Registrar Nuevo Lead</h2>
+      <i class="ti ti-x btn-close-panel" onclick="togglePanel(false)"></i>
     </div>
-    <div class="form-group">
-      <label>Empresa / Organización</label>
-      <input type="text" id="n-empresa" placeholder="Nombre del negocio">
-    </div>
+    
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>Nombre del Prospecto *</label>
+          <input type="text" id="n-nombre" placeholder="Ej. Juan Pérez">
+        </div>
+        <div class="form-group">
+          <label>Empresa / Organización</label>
+          <input type="text" id="n-empresa" placeholder="Ej. Distribuidora Alfa">
+        </div>
+      </div>
 
-    <div class="field-row">
-      <div class="form-group">
-        <label>Teléfono (WhatsApp)</label>
-        <input type="text" id="n-telefono" placeholder="Ej. 2221234567">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
+        <div class="form-group">
+          <label>Teléfono de Contacto</label>
+          <input type="text" id="n-tel" placeholder="Ej. 2221234567">
+        </div>
+        <div class="form-group">
+          <label>Correo Electrónico</label>
+          <input type="email" id="n-correo" placeholder="Ej. juan@correo.com">
+        </div>
       </div>
-      <div class="form-group">
-        <label>Correo Electrónico</label>
-        <input type="email" id="n-correo" placeholder="correo@ejemplo.com">
-      </div>
-    </div>
 
-    <div class="field-row">
-      <div class="form-group">
-        <label>Estado / Región</label>
-        <input type="text" id="n-estado-geo" placeholder="Ej. Puebla">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
+        <div class="form-group">
+          <label>Origen / Canal de Entrada</label>
+          <select id="n-fuente"></select>
+        </div>
+        <div class="form-group">
+          <label>Producto de Interés</label>
+          <select id="n-producto"></select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>País</label>
-        <input type="text" id="n-pais" value="México">
-      </div>
-    </div>
 
-    <div class="section-sep"><i class="ti ti-coin"></i> Perfil Comercial y Asignación Interna</div>
-    <div class="field-row">
-      <div class="form-group">
-        <label>Fuente u Origen</label>
-        <select id="n-fuente"></select>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
+        <div class="form-group">
+          <label>Monto Estimado ($)</label>
+          <input type="number" id="n-monto" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Rango de Presupuesto</label>
+          <select id="n-presupuesto"></select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Producto / Interés</label>
-        <select id="n-producto"></select>
-      </div>
-    </div>
 
-    <div class="field-row">
-      <div class="form-group">
-        <label>Presupuesto</label>
-        <select id="n-presupuesto"></select>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
+        <div class="form-group">
+          <label>Área Responsable</label>
+          <select id="n-responsable"></select>
+        </div>
+        <div class="form-group">
+          <label>Ejecutivo Asignado</label>
+          <select id="n-ejecutivo"></select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Monto Estimado de Venta</label>
-        <input type="number" id="n-monto" value="0" step="0.01">
-      </div>
-    </div>
 
-    <div class="field-row">
-      <div class="form-group">
-        <label>Departamento Responsable</label>
-        <select id="n-responsable"></select>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+        <div class="form-group">
+          <label>Prioridad</label>
+          <select id="n-prioridad"></select>
+        </div>
+        <div class="form-group">
+          <label>Estado del Pipeline</label>
+          <select id="n-situacion"></select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Ejecutivo Asignado</label>
-        <select id="n-ejecutivo"></select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Prioridad</label>
-      <select id="n-prioridad"></select>
-    </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
-      <div class="form-group">
-        <label>Estado del Pipeline</label>
-        <select id="n-situacion"></select>
-      </div>
-      <div class="form-group">
-        <label>Próximo Seguimiento</label>
+      <div class="form-group" style="margin-top:10px;">
+        <label>Próximo Seguimiento Agendado</label>
         <input type="datetime-local" id="n-seg">
       </div>
-    </div>
 
-    <div class="form-group" style="margin-top:10px;">
-      <label>Notas y Bitácora de Seguimiento</label>
-      <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles de la llamada o acuerdo..."></textarea>
-    </div>
+      <div class="form-group" style="margin-top:10px;">
+        <label>Notas y Bitácora de Seguimiento</label>
+        <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del primer contacto o acuerdos..."></textarea>
+      </div>
 
-    <div style="margin-top:24px; display:flex; justify-content:space-between;">
-      <button id="btn-delete-lead" class="btn btn-danger" onclick="eliminarLeadActual()"><i class="ti ti-trash"></i> Eliminar</button>
-      <div style="display:flex; gap:8px;">
-        <button class="btn btn-secondary" onclick="togglePanel(false)">Cancelar</button>
-        <button class="btn btn-primary" onclick="guardarLeadSupabase()"><i class="ti ti-device-floppy"></i> Guardar Registro</button>
+      <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:center;">
+        <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" onclick="eliminarLeadActual()">
+          <i class="ti ti-trash"></i> Eliminar
+        </button>
+        <div style="display:flex; gap:8px; margin-left:auto;">
+          <button class="btn btn-secondary" onclick="togglePanel(false)">Cancelar</button>
+          <button class="btn btn-primary" onclick="guardarLeadFormulario()">
+            <i class="ti ti-device-floppy"></i> Guardar Prospecto
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="notif" id="notif">Operación realizada con éxito</div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

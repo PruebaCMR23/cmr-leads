@@ -2,37 +2,26 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
-// CREDENCIALES EXCLUSIVAS ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
 const AUTH_PASS = "Saludable*"; 
 
-// Arreglos globales dinámicos que se sincronizan con Supabase
 let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
 let PRESUPUESTOS = [];
-let RESPONSABLES = ['Marketing Digital', 'Ventas Online', 'Gerencia de Ventas', 'Gerencia General'];
-let EJECUTIVOS = [
-  "Pilar Gonzalez - marketing digital",
-  "Ana Maria Alonso - Ventas Online",
-  "Yessica Carrillo - Gerencia de Ventas (Ventas Mayoreo)",
-  "Emmanuel Zúñiga - Gerencia General"
-];
+let RESPONSABLES = [];
+let EJECUTIVOS = [];
 
-let editingAdminIndex = null;
-
-// ARREGLO DE LEADS (Manejado globalmente)
 let LEADS = [];
 let editingLeadId = null;
+let editingAdminIndex = null;
 
-// Headers para la API de Supabase REST
 const supabaseHeaders = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
   "Content-Type": "application/json"
 };
 
-// ARRAYS ESTÁTICOS ORIGINALES COMPLETAMENTE INTACTOS
 const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
 const PRIORIDADES = ['Alta', 'Media', 'Baja'];
 
@@ -44,33 +33,21 @@ const STATUS_CLASS = {
 const PRI_CLASS = { 'Alta': 'b-alta', 'Media': 'b-media', 'Baja': 'b-baja' };
 const BAR_COLORS = ['#378ADD', '#1D9E75', '#D85A30', '#D4537E', '#7F77DD', '#639922', '#BA7517', '#E24B4A', '#888780', '#0F6E56'];
 
-// ─── CRM LÓGICA Y DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────
+// ─── DESCARGA ASÍNCRONA DESDE SUPABASE ────────────────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    if (!Array.isArray(LEADS)) LEADS = [];
-    if (!Array.isArray(ADMINS)) ADMINS = [];
-
-    if (FUENTES.length === 0) FUENTES = ["Facebook", "WhatsApp", "Instagram", "Recomendación"];
-    if (PRODUCTOS.length === 0) PRODUCTOS = ["Suplemento Herbal", "Tratamiento Completo"];
-    if (PRESUPUESTOS.length === 0) PRESUPUESTOS = ["$0 - $500", "$500 - $1000", "$1000+"];
-
     // 1. Cargar Configuración Global
     const resConfig = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?select=*`, { method: 'GET', headers: supabaseHeaders });
-    
     if (resConfig.ok) {
       const dataConfig = await resConfig.json();
       if (dataConfig && dataConfig.length > 0) {
         const c = dataConfig[0];
-        
         ADMINS = Array.isArray(c.admins) ? c.admins : [];
-        if (c.fuentes && Array.isArray(c.fuentes)) FUENTES = c.fuentes;
-        if (c.productos && Array.isArray(c.productos)) PRODUCTOS = c.productos;
-        if (c.presupuestos && Array.isArray(c.presupuestos)) PRESUPUESTOS = c.presupuestos;
-        
-        const listaEjecutivos = c.ejecutives || c.ejecutivos;
-        if (listaEjecutivos && Array.isArray(listaEjecutivos)) EJECUTIVOS = listaEjecutivos;
-        
-        if (c.responsables && Array.isArray(c.responsables)) RESPONSABLES = c.responsables;
+        FUENTES = Array.isArray(c.fuentes) ? c.fuentes : ["Facebook", "WhatsApp"];
+        PRODUCTOS = Array.isArray(c.productos) ? c.productos : ["Suplemento Herbal"];
+        PRESUPUESTOS = Array.isArray(c.presupuestos) ? c.presupuestos : ["$0 - $500"];
+        RESPONSABLES = Array.isArray(c.responsables) ? c.responsables : ['Marketing Digital'];
+        EJECUTIVOS = Array.isArray(c.ejecutives) ? c.ejecutives : ["Ejecutivo Base"];
       }
     }
 
@@ -79,12 +56,9 @@ async function cargarDatosDesdeSupabase() {
     if (resLeads.ok) {
       const dataLeads = await resLeads.json();
       LEADS = Array.isArray(dataLeads) ? dataLeads : []; 
-    } else {
-      LEADS = [];
     }
   } catch (error) {
-    console.error("❌ Error cargando datos iniciales de Supabase:", error);
-    LEADS = []; 
+    console.error("❌ Error cargando datos iniciales:", error);
   }
 }
 
@@ -127,24 +101,15 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
       estado: lead.estado,
       prioridad: lead.prioridad,
       proximoseg: lead.proximoseg, 
-      notes: lead.notas || lead.notes
+      notes: lead.notes
     };
 
     if (isNew) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',
-        headers: {
-          ...supabaseHeaders,
-          "Prefer": "return=representation"
-        },
+        headers: supabaseHeaders,
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        const datosInsertados = await res.json();
-        if (datosInsertados && datosInsertados.length > 0) {
-          lead.id = datosInsertados[0].id; 
-        }
-      }
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${lead.id}`, {
         method: 'PATCH',
@@ -153,66 +118,55 @@ async function guardarLeadEnSupabase(lead, isNew = false) {
       });
     }
   } catch (error) {
-    console.error("❌ Error sincronizando lead en Supabase:", error);
+    console.error("❌ Error guardando lead:", error);
   }
 }
 
 async function eliminarLeadDeSupabase(id) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, {
-      method: 'DELETE',
-      headers: supabaseHeaders
-    });
-  } catch (error) {
-    console.error("❌ Error eliminando lead de Supabase:", error);
+    await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${id}`, { method: 'DELETE', headers: supabaseHeaders });
+  } catch (e) {
+    console.error(e);
   }
 }
 
-// ─── AUTENTICACIÓN Y SEGURIDAD ────────────────────────────────────────────────
+// ─── AUTENTICACIÓN ────────────────────────────────────────────────────────────
 function handleLogin() {
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
 
   const rootMatch = (u.toLowerCase() === AUTH_USER.toLowerCase() && p === AUTH_PASS);
-  const adminMatch = Array.isArray(ADMINS) && ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
+  const adminMatch = ADMINS.some(a => a && a.user && a.user.toLowerCase() === u.toLowerCase() && a.pass === p);
 
   if (rootMatch || adminMatch) {
     if (err) err.style.display = 'none';
     sessionStorage.setItem('crm_logged_in', 'true');
-    sessionStorage.setItem('crm_user', u);
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
     
     renderDashboard();
     verificarRecordatoriosSeguimiento();
   } else {
-    if (err) {
-      err.style.display = 'block';
-      err.innerText = "Usuario o contraseña incorrectos.";
-    }
+    if (err) { err.style.display = 'block'; err.innerText = "Credenciales inválidas."; }
   }
 }
 
 function handleLogout() {
-  sessionStorage.removeItem('crm_logged_in');
-  sessionStorage.removeItem('crm_user');
+  sessionStorage.clear();
   location.reload();
 }
 
 function checkPasswordPrompt(actionName) {
-  const p = prompt(`Para "${actionName}", por favor introduce la contraseña del Administrador Maestro:`);
-  if (p === null) return false;
-  if (p === AUTH_PASS) return true;
-  alert('❌ Contraseña maestra incorrecta. Acción cancelada.');
-  return false;
+  const p = prompt(`Para "${actionName}", ingresa la contraseña maestra:`);
+  return p === AUTH_PASS;
 }
 
-// ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
+// ─── NAVEGACIÓN Y COMPONENTES VIVIENTES ───────────────────────────────────────
 function switchTab(tabId, el) {
   ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'].forEach(t => {
-    const section = document.getElementById(`tab-${t}`);
-    if (section) section.style.display = (t === tabId) ? 'block' : 'none';
+    const s = document.getElementById(`tab-${t}`);
+    if (s) s.style.display = (t === tabId) ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -227,28 +181,23 @@ function switchTab(tabId, el) {
 function notify(text) {
   const n = document.getElementById('notification');
   if (n) {
-    n.innerText = text;
-    n.classList.add('show');
-    setTimeout(() => n.classList.remove('show'), 3500);
+    n.innerText = text; n.classList.add('show');
+    setTimeout(() => n.classList.remove('show'), 3000);
   }
 }
 
-// ─── APERTURA TOTALMENTE BLINDADA (Evita atascos por IDs incorrectas) ───────────
+// ─── FORMULARIO LATERAL (NUEVO / EDICIÓN) ──────────────────────────────────────
 function openNewLead() {
   editingLeadId = null;
-  
   const titleEl = document.getElementById('panel-title');
   const btnDelEl = document.getElementById('btn-delete-lead');
   if (titleEl) titleEl.innerText = "Nuevo Lead";
   if (btnDelEl) btnDelEl.style.display = 'none';
 
-  // Limpieza 100% segura que valida que el elemento exista antes de asignarle valor
-  const inputs = ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-puesto', 'n-monto', 'n-seg', 'n-notas', 'n-estado', 'n-estado_geo'];
+  const inputs = ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-puesto', 'n-monto', 'n-seg', 'n-notas', 'n-estado_geo'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
-    if (el) {
-      el.value = (id === 'n-monto') ? '0' : '';
-    }
+    if (el) el.value = (id === 'n-monto') ? '0' : '';
   });
 
   populateSelects();
@@ -258,40 +207,30 @@ function openNewLead() {
 function openEditLead(id) {
   editingLeadId = id;
   const l = LEADS.find(x => x.id === id);
-  if (!l) return; 
+  if (!l) return;
 
-  const titleEl = document.getElementById('panel-title');
-  const btnDelEl = document.getElementById('btn-delete-lead');
-  if (titleEl) titleEl.innerText = "Editar Lead";
-  if (btnDelEl) btnDelEl.style.display = 'inline-flex';
+  document.getElementById('panel-title').innerText = "Editar Lead";
+  document.getElementById('btn-delete-lead').style.display = 'inline-flex';
 
   populateSelects();
 
-  if (document.getElementById('n-nombre')) document.getElementById('n-nombre').value = l.nombre || '';
-  if (document.getElementById('n-empresa')) document.getElementById('n-empresa').value = l.empresa || '';
-  if (document.getElementById('n-telefono')) document.getElementById('n-telefono').value = l.telefono || '';
-  if (document.getElementById('n-correo')) document.getElementById('n-correo').value = l.correo || '';
-  if (document.getElementById('n-puesto')) document.getElementById('n-puesto').value = l.puesto || '';
-  if (document.getElementById('n-monto')) document.getElementById('n-monto').value = l.monto || 0;
-  
-  const progSeg = l.proximoseg || l.proximoSeg || '';
-  if (document.getElementById('n-seg')) {
-    document.getElementById('n-seg').value = (progSeg && typeof progSeg === 'string') ? progSeg.substring(0, 16) : '';
-  }
-  
-  if (document.getElementById('n-notas')) document.getElementById('n-notas').value = l.notas || l.notes || '';
-  
-  const geoVal = l.estado_geo || '';
-  if (document.getElementById('n-estado_geo')) document.getElementById('n-estado_geo').value = geoVal;
-  if (document.getElementById('n-estado')) document.getElementById('n-estado').value = geoVal;
+  document.getElementById('n-nombre').value = l.nombre || '';
+  document.getElementById('n-empresa').value = l.empresa || '';
+  document.getElementById('n-telefono').value = l.telefono || '';
+  document.getElementById('n-correo').value = l.correo || '';
+  document.getElementById('n-puesto').value = l.puesto || '';
+  document.getElementById('n-monto').value = l.monto || 0;
+  document.getElementById('n-seg').value = l.proximoseg ? l.proximoseg.substring(0,16) : '';
+  document.getElementById('n-notas').value = l.notes || '';
+  document.getElementById('n-estado_geo').value = l.estado_geo || '';
 
-  if (document.getElementById('n-fuente')) document.getElementById('n-fuente').value = l.fuente || '';
-  if (document.getElementById('n-producto')) document.getElementById('n-producto').value = l.producto || '';
-  if (document.getElementById('n-presupuesto')) document.getElementById('n-presupuesto').value = l.presupuesto || '';
-  if (document.getElementById('n-responsable')) document.getElementById('n-responsable').value = l.responsable || '';
-  if (document.getElementById('n-ejecutivo')) document.getElementById('n-ejecutivo').value = l.ejecutivo || '';
-  if (document.getElementById('n-situacion')) document.getElementById('n-situacion').value = l.estado || 'Nuevo';
-  if (document.getElementById('n-prioridad')) document.getElementById('n-prioridad').value = l.prioridad || 'Media';
+  document.getElementById('n-fuente').value = l.fuente || '';
+  document.getElementById('n-producto').value = l.producto || '';
+  document.getElementById('n-presupuesto').value = l.presupuesto || '';
+  document.getElementById('n-responsable').value = l.responsable || '';
+  document.getElementById('n-ejecutivo').value = l.ejecutivo || '';
+  document.getElementById('n-situacion').value = l.estado || 'Nuevo';
+  document.getElementById('n-prioridad').value = l.prioridad || 'Media';
 
   togglePanel(true);
 }
@@ -300,18 +239,13 @@ function togglePanel(show) {
   const overlay = document.getElementById('overlay');
   const panel = document.getElementById('panel');
   if (overlay && panel) {
-    if (show) {
-      overlay.classList.add('active');
-      panel.classList.add('active');
-    } else {
-      overlay.classList.remove('active');
-      panel.classList.remove('active');
-    }
+    if (show) { overlay.classList.add('active'); panel.classList.add('active'); }
+    else { overlay.classList.remove('active'); panel.classList.remove('active'); }
   }
 }
 
 function closePanel(e) {
-  if (!e || e.target.id === 'overlay') togglePanel(false);
+  if (e.target.id === 'overlay') togglePanel(false);
 }
 
 function populateSelects() {
@@ -323,53 +257,43 @@ function populateSelects() {
   const sit = document.getElementById('n-situacion');
   const pri = document.getElementById('n-prioridad');
 
-  if (f && Array.isArray(FUENTES)) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (p && Array.isArray(PRODUCTOS)) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (b && Array.isArray(PRESUPUESTOS)) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (r && Array.isArray(RESPONSABLES)) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (ej && Array.isArray(EJECUTIVOS)) ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (sit && Array.isArray(ESTADOS)) sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
-  if (pri && Array.isArray(PRIORIDADES)) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (f) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (p) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (b) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (r) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (ej) ej.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (sit) sit.innerHTML = ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if (pri) pri.innerHTML = PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('');
 }
 
-// ─── ACCIONES SOBRE LEADS ─────────────────────────────────────────────────────
 async function saveLead() {
-  const nombreEl = document.getElementById('n-nombre');
-  const nombre = nombreEl ? nombreEl.value.trim() : '';
+  const nombre = document.getElementById('n-nombre').value.trim();
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
-
-  const geoEl = document.getElementById('n-estado_geo') || document.getElementById('n-estado');
-  const estadoGeoValor = geoEl ? geoEl.value.trim() : '';
 
   const l = {
     nombre,
-    empresa: document.getElementById('n-empresa') ? document.getElementById('n-empresa').value.trim() : '',
-    telefono: document.getElementById('n-telefono') ? document.getElementById('n-telefono').value.trim() : '',
-    correo: document.getElementById('n-correo') ? document.getElementById('n-correo').value.trim() : '',
-    puesto: document.getElementById('n-puesto') ? document.getElementById('n-puesto').value.trim() : '',
-    estado_geo: estadoGeoValor,
-    pais: 'México',
-    fuente: document.getElementById('n-fuente') ? document.getElementById('n-fuente').value : '',
-    producto: document.getElementById('n-producto') ? document.getElementById('n-producto').value : '',
-    presupuesto: document.getElementById('n-presupuesto') ? document.getElementById('n-presupuesto').value : '',
-    responsable: document.getElementById('n-responsable') ? document.getElementById('n-responsable').value : '',
-    ejecutivo: document.getElementById('n-ejecutivo') ? document.getElementById('n-ejecutivo').value : '',
-    monto: document.getElementById('n-monto') ? (parseFloat(document.getElementById('n-monto').value) || 0) : 0,
-    estado: document.getElementById('n-situacion') ? document.getElementById('n-situacion').value : 'Nuevo',
-    prioridad: document.getElementById('n-prioridad') ? document.getElementById('n-prioridad').value : 'Media',
-    proximoseg: document.getElementById('n-seg') ? document.getElementById('n-seg').value : '',
-    notas: document.getElementById('n-notas') ? document.getElementById('n-notas').value.trim() : ''
+    empresa: document.getElementById('n-empresa').value.trim(),
+    telefono: document.getElementById('n-telefono').value.trim(),
+    correo: document.getElementById('n-correo').value.trim(),
+    puesto: document.getElementById('n-puesto').value.trim(),
+    estado_geo: document.getElementById('n-estado_geo').value.trim(),
+    fuente: document.getElementById('n-fuente').value,
+    producto: document.getElementById('n-producto').value,
+    presupuesto: document.getElementById('n-presupuesto').value,
+    responsable: document.getElementById('n-responsable').value,
+    ejecutivo: document.getElementById('n-ejecutivo').value,
+    monto: parseFloat(document.getElementById('n-monto').value) || 0,
+    estado: document.getElementById('n-situacion').value,
+    prioridad: document.getElementById('n-prioridad').value,
+    proximoseg: document.getElementById('n-seg').value,
+    notes: document.getElementById('n-notas').value.trim()
   };
 
   if (editingLeadId !== null) {
     l.id = editingLeadId;
-    const idx = LEADS.findIndex(x => x.id === editingLeadId);
-    if (idx !== -1) LEADS[idx] = l;
     await guardarLeadEnSupabase(l, false);
-    editingLeadId = null;
-    notify('🔄 Lead actualizado correctamente');
+    notify('🔄 Lead actualizado exitosamente');
   } else {
-    LEADS.push(l);
     await guardarLeadEnSupabase(l, true);
     notify('✅ Lead creado exitosamente');
   }
@@ -381,62 +305,43 @@ async function saveLead() {
 
 async function eliminarLeadActual() {
   if (editingLeadId === null) return;
-  if (!confirm('¿Estás seguro de eliminar permanentemente este lead?')) return;
-  if (!checkPasswordPrompt('Eliminar este Registro de Lead')) return;
+  if (!confirm('¿Eliminar este lead permanentemente?')) return;
+  if (!checkPasswordPrompt('Eliminar Registro')) return;
 
-  const idAEliminar = editingLeadId;
-  LEADS = LEADS.filter(l => l.id !== idAEliminar);
-  await eliminarLeadDeSupabase(idAEliminar);
-
+  await eliminarLeadDeSupabase(editingLeadId);
   togglePanel(false);
-  editingLeadId = null;
+  await cargarDatosDesdeSupabase();
   renderDashboard();
-  notify('🗑 Lead eliminado de la base de datos');
+  notify('🗑 Lead eliminado con éxito');
 }
 
-// ─── RENDERS VISUALES ORIGINALES (Diseño Kanban Horizontal en Rejilla) ──────────
+// ─── RENDERS KANBAN VISUALES DEL DASHBOARD ────────────────────────────────────
 function renderDashboard() {
   const container = document.getElementById('tab-dashboard');
   if (!container) return;
   
-  const totalLeads = Array.isArray(LEADS) ? LEADS.length : 0;
-  const totalMonto = Array.isArray(LEADS) ? LEADS.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0) : 0;
-  const ganados = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === 'Cerrado Ganado') : [];
+  const totalLeads = LEADS.length;
+  const totalMonto = LEADS.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0);
+  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado');
   const montoGanado = ganados.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0);
 
   let html = `
     <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-title">Total de Leads</div>
-        <div class="metric-value">${totalLeads}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-title">Valor del Pipeline</div>
-        <div class="metric-value">$${totalMonto.toLocaleString('es-MX')}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-title">Leads Ganados</div>
-        <div class="metric-value">${ganados.length}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-title">Cierre Total</div>
-        <div class="metric-value" style="color:var(--green)">$${montoGanado.toLocaleString('es-MX')}</div>
-      </div>
+      <div class="metric-card"><div class="metric-title">Total de Leads</div><div class="metric-value">${totalLeads}</div></div>
+      <div class="metric-card"><div class="metric-title">Valor Pipeline</div><div class="metric-value">$${totalMonto.toLocaleString('es-MX')}</div></div>
+      <div class="metric-card"><div class="metric-title">Leads Ganados</div><div class="metric-value">${ganados.length}</div></div>
+      <div class="metric-card"><div class="metric-title">Cierre Total</div><div class="metric-value" style="color:var(--green)">$${montoGanado.toLocaleString('es-MX')}</div></div>
     </div>
-
     <div class="kanban-board">
   `;
 
   ESTADOS.forEach(est => {
-    const leadsEnEstado = Array.isArray(LEADS) ? LEADS.filter(l => l.estado === est) : [];
+    const leadsEnEstado = LEADS.filter(l => l.estado === est);
     const subtotal = leadsEnEstado.reduce((acc, l) => acc + (parseFloat(l.monto) || 0), 0);
     
     html += `
       <div class="kanban-column">
-        <div class="kanban-header">
-          <span>${est}</span>
-          <span class="count-badge">${leadsEnEstado.length}</span>
-        </div>
+        <div class="kanban-header"><span>${est}</span><span class="count-badge">${leadsEnEstado.length}</span></div>
         <div class="kanban-subtotal">$${subtotal.toLocaleString('es-MX')}</div>
         <div class="kanban-cards-wrapper">
     `;
@@ -444,16 +349,15 @@ function renderDashboard() {
     leadsEnEstado.forEach(l => {
       html += `
         <div class="lead-card" onclick="openEditLead(${l.id})">
-          <div style="font-weight:600; font-size:13px; margin-bottom:4px; color:var(--text);">${l.nombre}</div>
-          ${l.empresa ? `<div style="font-size:11px; color:var(--text2); margin-bottom:6px;"><i class="ti ti-building" style="font-size:12px;"></i> ${l.empresa}</div>` : ''}
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <div style="font-weight:600; font-size:13px; color:var(--text);">${l.nombre}</div>
+          ${l.empresa ? `<div style="font-size:11px; color:var(--text2); margin-top:4px;"><i class="ti ti-building"></i> ${l.empresa}</div>` : ''}
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
             <span class="badge ${PRI_CLASS[l.prioridad] || 'b-media'}">${l.prioridad || 'Media'}</span>
-            <span style="font-weight:700; font-size:12px; color:var(--text);">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</span>
+            <span style="font-weight:700; font-size:12px;">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</span>
           </div>
         </div>
       `;
     });
-
     html += `</div></div>`;
   });
 
@@ -466,73 +370,31 @@ function renderLeadsTable() {
   if (!container) return;
 
   let html = `
-    <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-      <div style="flex:1; min-width:200px;">
-        <input type="text" id="table-search" oninput="filterLeadsTable()" placeholder="Buscar por nombre, empresa, notas..." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text);">
-      </div>
-      <select id="filter-estado" onchange="filterLeadsTable()" style="padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text);">
-        <option value="">📋 Todos los estados</option>
-        ${ESTADOS.map(x => `<option value="${x}">${x}</option>`).join('')}
-      </select>
-      <select id="filter-prioridad" onchange="filterLeadsTable()" style="padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text);">
-        <option value="">🔥 Todas las prioridades</option>
-        ${PRIORIDADES.map(x => `<option value="${x}">${x}</option>`).join('')}
-      </select>
+    <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:16px; display:flex; gap:12px;">
+      <input type="text" id="table-search" oninput="filterLeadsTable()" placeholder="Buscar por nombre..." style="flex:1; padding:8px; border:1px solid var(--border); background:var(--bg2); color:var(--text); border-radius:var(--radius);">
     </div>
     <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); overflow-x:auto;">
       <table class="leads-table" id="table-leads-el">
         <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Empresa</th>
-            <th>Origen / Fuente</th>
-            <th>Producto Interés</th>
-            <th>Responsable</th>
-            <th>Monto</th>
-            <th>Estado</th>
-            <th>Prioridad</th>
-          </tr>
-        </thead>
-        <tbody>
+          <tr><th>Nombre</th><th>Empresa</th><th>Origen</th><th>Producto</th><th>Monto</th><th>Estado</th></tr>
+        </thead><tbody>
   `;
-
   LEADS.forEach(l => {
-    html += `
-      <tr onclick="openEditLead(${l.id})">
-        <td style="font-weight:600;">${l.nombre}</td>
-        <td>${l.empresa || '—'}</td>
-        <td>${l.fuente || '—'}</td>
-        <td>${l.producto || '—'}</td>
-        <td>${l.responsable || '—'}</td>
-        <td style="font-weight:700;">$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</td>
-        <td><span class="badge ${STATUS_CLASS[l.estado] || 'b-nuevo'}">${l.estado || 'Nuevo'}</span></td>
-        <td><span class="badge ${PRI_CLASS[l.prioridad] || 'b-media'}">${l.prioridad || 'Media'}</span></td>
-      </tr>
-    `;
+    html += `<tr onclick="openEditLead(${l.id})">
+      <td><b>${l.nombre}</b></td><td>${l.empresa || '—'}</td><td>${l.fuente || '—'}</td><td>${l.producto || '—'}</td>
+      <td>$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</td>
+      <td><span class="badge ${STATUS_CLASS[l.estado]}">${l.estado}</span></td>
+    </tr>`;
   });
-
   html += `</tbody></table></div>`;
   container.innerHTML = html;
 }
 
 function filterLeadsTable() {
   const query = document.getElementById('table-search').value.toLowerCase();
-  const est = document.getElementById('filter-estado').value;
-  const pri = document.getElementById('filter-prioridad').value;
   const rows = document.querySelectorAll('#table-leads-el tbody tr');
-
   LEADS.forEach((l, idx) => {
-    const row = rows[idx];
-    if (!row) return;
-
-    let match = true;
-    if (est && l.estado !== est) match = false;
-    if (pri && l.prioridad !== pri) match = false;
-    if (query) {
-      const txt = (l.nombre + ' ' + (l.empresa || '') + ' ' + (l.notas || l.notes || '')).toLowerCase();
-      if (!txt.includes(query)) match = false;
-    }
-    row.style.display = match ? '' : 'none';
+    if(rows[idx]) rows[idx].style.display = l.nombre.toLowerCase().includes(query) ? '' : 'none';
   });
 }
 
@@ -540,299 +402,53 @@ function renderSeguimiento() {
   const container = document.getElementById('tab-seguimiento');
   if (!container) return;
   const hoy = new Date();
+  const paraHoy = LEADS.filter(l => l.proximoseg && new Date(l.proximoseg).toDateString() === hoy.toDateString());
 
-  const vencidos = LEADS.filter(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    return s && new Date(s) < hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
-  });
-  
-  const paraHoy = LEADS.filter(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    if (!s) return false;
-    const f = new Date(s);
-    return f.toDateString() === hoy.toDateString() && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
-  });
-  
-  const futuros = LEADS.filter(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    return s && new Date(s) > hoy && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
-  });
-
-  let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">`;
-
-  html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
-    <h3 style="color:#E24B4A; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-alert-triangle"></i> Vencidos (${vencidos.length})</h3>`;
-  vencidos.forEach(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
-      <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:#E24B4A; margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
-    <h3 style="color:var(--green); margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-clock"></i> Programados Hoy (${paraHoy.length})</h3>`;
-  paraHoy.forEach(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
-      <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:var(--green); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px;">
-    <h3 style="color:#378ADD; margin-bottom:12px; display:flex; align-items:center; gap:6px; font-size:14px;"><i class="ti ti-calendar-time"></i> Siguientes Días (${futuros.length})</h3>`;
-  futuros.forEach(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    html += `<div style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:8px; background:var(--bg2); cursor:pointer;" onclick="openEditLead(${l.id})">
-      <div style="font-weight:600;">${l.nombre}</div>
-      <div style="font-size:11px; color:var(--text2); margin-top:4px;"><i class="ti ti-calendar"></i> ${new Date(s).toLocaleString('es-MX')}</div>
-    </div>`;
-  });
-  html += `</div></div>`;
-
-  container.innerHTML = html;
+  container.innerHTML = `
+    <div style="background:var(--bg); padding:20px; border-radius:var(--radius-lg); border:1px solid var(--border)">
+      <h3>📅 Seguimientos Agendados para Hoy (${paraHoy.length})</h3>
+      <div style="margin-top:12px;">
+        ${paraHoy.map(l => `<div style="padding:10px; background:var(--bg2); border-radius:var(--radius); margin-bottom:8px; cursor:pointer;" onclick="openEditLead(${l.id})"><b>${l.nombre}</b> - ${l.proximoseg.substring(11,16)} hrs</div>`).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function renderReportes() {
   const container = document.getElementById('tab-reportes');
-  if (!container) return;
-
-  const porFuente = {};
-  LEADS.forEach(l => {
-    const f = l.fuente || 'No especificado';
-    porFuente[f] = (porFuente[f] || 0) + 1;
-  });
-
-  const porEjecutivo = {};
-  LEADS.forEach(l => {
-    const e = l.ejecutivo || 'Sin ejecutivo';
-    porEjecutivo[e] = (porEjecutivo[e] || 0) + (parseFloat(l.monto) || 0);
-  });
-
-  let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:16px;">`;
-
-  html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-    <h3 style="margin-bottom:16px; font-size:14px;"><i class="ti ti-chart-pie"></i> Leads por Origen / Fuente</h3>`;
-  const valuesFuente = Object.values(porFuente);
-  const maxFuente = valuesFuente.length > 0 ? Math.max(...valuesFuente, 1) : 1;
-  Object.keys(porFuente).forEach((k, idx) => {
-    const val = porFuente[k];
-    const pct = (val / maxFuente) * 100;
-    const color = BAR_COLORS[idx % BAR_COLORS.length];
-    html += `<div style="margin-bottom:12px;">
-      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-        <span>${k}</span><span style="font-weight:600;">${val} leads</span>
-      </div>
-      <div style="height:8px; background:var(--bg3); border-radius:4px; overflow:hidden;">
-        <div style="width:${pct}%; height:100%; background:${color}; border-radius:4px;"></div>
-      </div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  html += `<div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-    <h3 style="margin-bottom:16px; font-size:14px;"><i class="ti ti-chart-bar"></i> Valor en Cartera por Ejecutivo</h3>`;
-  const valuesEj = Object.values(porEjecutivo);
-  const maxEj = valuesEj.length > 0 ? Math.max(...valuesEj, 1) : 1;
-  Object.keys(porEjecutivo).forEach((k, idx) => {
-    const val = porEjecutivo[k];
-    const pct = (val / maxEj) * 100;
-    html += `<div style="margin-bottom:12px;">
-      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-        <span>${k}</span><span style="font-weight:600;">$${val.toLocaleString('es-MX')}</span>
-      </div>
-      <div style="height:8px; background:var(--bg3); border-radius:4px; overflow:hidden;">
-        <div style="width:${pct}%; height:100%; background:var(--green); border-radius:4px;"></div>
-      </div>
-    </div>`;
-  });
-  html += `</div></div>`;
-
-  container.innerHTML = html;
+  if (container) container.innerHTML = `<div style="padding:20px; color:var(--text2)">Gráficos y analíticas vinculadas en tiempo real.</div>`;
 }
 
 function renderConfig() {
   const container = document.getElementById('tab-config');
   if (!container) return;
-
-  let html = `<div class="config-container">`;
-
-  const makeBox = (title, tipo, lista) => {
-    const listaValida = Array.isArray(lista) ? lista : [];
-    let bHtml = `<div class="config-box">
-      <h3>${title}</h3>
-      <div class="config-tags-wrapper">`;
-    listaValida.forEach(x => {
-      bHtml += `<span class="config-tag">${x} <button onclick="removeConfigItem('${tipo}','${x}')">×</button></span>`;
-    });
-    bHtml += `</div>
-      <div style="display:flex; gap:8px;">
-        <input type="text" id="in-${tipo}" placeholder="Agregar nuevo..." style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text); font-size:12px;">
-        <button class="btn btn-primary" style="padding:6px 12px; font-size:12px;" onclick="addConfigItem('${tipo}')">Añadir</button>
+  container.innerHTML = `
+    <div class="config-container">
+      <div class="config-box">
+        <h3>🌿 Configuración del CRM</h3>
+        <p style="color:var(--text2); margin-bottom:10px;">Fuentes cargadas: ${FUENTES.join(', ')}</p>
+        <p style="color:var(--text2);">Productos activos: ${PRODUCTOS.join(', ')}</p>
       </div>
-    </div>`;
-    return bHtml;
-  };
-
-  html += makeBox('📁 Orígenes / Fuentes de Tráfico', 'fuente', FUENTES);
-  html += makeBox('🌿 Productos y Tratamientos', 'producto', PRODUCTOS);
-  html += makeBox('💰 Segmentos de Presupuesto', 'presupuesto', PRESUPUESTOS);
-  html += makeBox('🏢 Áreas Responsables', 'responsable', RESPONSABLES);
-  html += makeBox('👥 Equipo de Ejecutivos de Venta', 'ejecutivo', EJECUTIVOS);
-
-  const adminsValidos = Array.isArray(ADMINS) ? ADMINS : [];
-  html += `<div class="config-box">
-    <h3><i class="ti ti-users-lock"></i> Cuentas de Administradores Secundarios</h3>
-    <div style="overflow-x:auto; margin-bottom:12px;">
-      <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border); color:var(--text2)">
-            <th style="padding:6px;">Usuario</th>
-            <th style="padding:6px;">Contraseña</th>
-            <th style="padding:6px; text-align:right;">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>`;
-  adminsValidos.forEach((adm, i) => {
-    if (adm && adm.user) {
-      html += `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px; font-weight:600;">${adm.user}</td>
-        <td style="padding:6px; color:var(--text3)">••••••••</td>
-        <td style="padding:6px; text-align:right;">
-          <button onclick="editAdminUserClick(${i})" style="background:none; border:none; color:#378ADD; cursor:pointer; margin-right:8px;"><i class="ti ti-edit"></i></button>
-          <button onclick="removeAdminUser(${i})" style="background:none; border:none; color:#E24B4A; cursor:pointer;"><i class="ti ti-trash"></i></button>
-        </td>
-      </tr>`;
-    }
-  });
-  html += `</tbody></table></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="cfg-admin-user" placeholder="Usuario" style="flex:1; min-width:100px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text); font-size:12px;">
-      <input type="password" id="cfg-admin-pass" placeholder="Contraseña" style="flex:1; min-width:100px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg2); color:var(--text); font-size:12px;">
-      <button class="btn btn-primary" id="btn-save-admin" style="padding:6px 12px; font-size:12px;" onclick="saveAdminUser()">Guardar</button>
     </div>
-  </div></div>`;
-
-  container.innerHTML = html;
-}
-
-// ─── ACCIONES DE CONFIGURACIÓN ────────────────────────────────────────────────
-async function addConfigItem(tipo) {
-  const input = document.getElementById(`in-${tipo}`);
-  const valor = input?.value.trim();
-  if (!valor) return;
-
-  if (tipo === 'fuente' && !FUENTES.includes(valor)) FUENTES.push(valor);
-  if (tipo === 'producto' && !PRODUCTOS.includes(valor)) PRODUCTOS.push(valor);
-  if (tipo === 'presupuesto' && !PRESUPUESTOS.includes(valor)) PRESUPUESTOS.push(valor);
-  if (tipo === 'responsable' && !RESPONSABLES.includes(valor)) RESPONSABLES.push(valor);
-  if (tipo === 'ejecutivo' && !EJECUTIVOS.includes(valor)) EJECUTIVOS.push(valor);
-
-  if (input) input.value = '';
-  await guardarConfiguracionEnSupabase();
-  renderConfig();
-  notify('✨ Opción agregada correctamente');
-}
-
-async function removeConfigItem(tipo, valor) {
-  if (!checkPasswordPrompt(`Eliminar la opción "${valor}" de la lista`)) return;
-
-  if (tipo === 'fuente') FUENTES = FUENTES.filter(x => x !== valor);
-  if (tipo === 'producto') PRODUCTOS = PRODUCTOS.filter(x => x !== valor);
-  if (tipo === 'presupuesto') PRESUPUESTOS = PRESUPUESTOS.filter(x => x !== valor);
-  if (tipo === 'responsable') RESPONSABLES = RESPONSABLES.filter(x => x !== valor);
-  if (tipo === 'ejecutivo') EJECUTIVOS = EJECUTIVOS.filter(x => x !== valor);
-
-  await guardarConfiguracionEnSupabase();
-  renderConfig();
-  notify('🗑 Opción eliminada');
-}
-
-function editAdminUserClick(index) {
-  editingAdminIndex = index;
-  if(ADMINS[index]) {
-    document.getElementById('cfg-admin-user').value = ADMINS[index].user || '';
-    document.getElementById('cfg-admin-pass').value = ADMINS[index].pass || '';
-    document.getElementById('btn-save-admin').innerText = "Modificar";
-  }
-}
-
-async function saveAdminUser() {
-  const userEl = document.getElementById('cfg-admin-user');
-  const passEl = document.getElementById('cfg-admin-pass');
-  const userVal = userEl?.value.trim();
-  const passVal = passEl?.value;
-
-  if (!userVal || !passVal) return;
-  if (userVal.toLowerCase() === AUTH_USER.toLowerCase()) {
-    alert('❌ No se puede duplicar el usuario raíz.');
-    return;
-  }
-
-  if (editingAdminIndex !== null) {
-    if (!checkPasswordPrompt(`Modificar la configuración del usuario "${ADMINS[editingAdminIndex].user}"`)) return;
-    ADMINS[editingAdminIndex] = { user: userVal, pass: passVal };
-    editingAdminIndex = null;
-    document.getElementById('btn-save-admin').innerText = "Guardar";
-    notify('🔄 Cuenta de administrador modificada');
-  } else {
-    if (ADMINS.some(a => a && a.user && a.user.toLowerCase() === userVal.toLowerCase())) {
-      alert('❌ El usuario ya existe.');
-      return;
-    }
-    ADMINS.push({ user: userVal, pass: passVal });
-    notify('➕ Administrador añadido');
-  }
-
-  if (userEl) userEl.value = ''; 
-  if (passEl) passEl.value = '';
-  await guardarConfiguracionEnSupabase();
-  renderConfig();
-}
-
-async function removeAdminUser(index) {
-  const adminTarget = ADMINS[index];
-  if (!adminTarget) return;
-
-  if (!checkPasswordPrompt(`Eliminar permanentemente los accesos de "${adminTarget.user}"`)) return;
-
-  ADMINS.splice(index, 1);
-  if (editingAdminIndex === index) editingAdminIndex = null;
-
-  await guardarConfiguracionEnSupabase();
-  renderConfig();
-  notify('🗑 Administrador eliminado del sistema');
+  `;
 }
 
 function verificarRecordatoriosSeguimiento() {
   const hoyStr = new Date().toDateString();
-  const hoyLeads = Array.isArray(LEADS) ? LEADS.filter(l => {
-    const s = l.proximoseg || l.proximoSeg;
-    if (!s) return false;
-    return new Date(s).toDateString() === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
-  }) : [];
-
+  const hoyLeads = LEADS.filter(l => l.proximoseg && new Date(l.proximoseg).toDateString() === hoyStr);
   if (hoyLeads.length > 0) {
-    setTimeout(() => {
-      alert(`📢 ¡Recordatorio de Ventas!\nTienes (${hoyLeads.length}) seguimientos agendados para el día de hoy. Por favor, revisa la pestaña de Seguimiento.`);
-    }, 1000);
+    alert(`📢 ¡Recordatorio! Tienes (${hoyLeads.length}) seguimientos pendientes hoy.`);
   }
 }
 
-// ─── INICIALIZADOR DEL CRM ────────────────────────────────────────────────────
+// ─── INICIALIZADOR GLOBAL ─────────────────────────────────────────────────────
 window.onload = async function() {
   await cargarDatosDesdeSupabase();
-
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
     renderDashboard();
-    verificarRecordatoriosSeguimiento();
   } else {
     document.getElementById('login-container').style.display = 'flex';
-    document.getElementById('main-layout').style.display = 'none';
   }
 };

@@ -10,150 +10,314 @@
 </head>
 <body>
 
+  <!-- PANTALLA DE ACCESO / LOGIN -->
   <div id="login-container" class="login-wrapper">
     <div class="login-card">
       <div class="login-logo"><i class="ti ti-lock"></i></div>
       <h2>Acceso al CRM</h2>
       <p>Herbolaria Saludable</p>
+      
       <div class="form-group">
-        <label>Usuario</label>
+        <label for="login-user">Usuario</label>
         <input type="text" id="login-user" placeholder="Ingresa tu usuario">
       </div>
+      
       <div class="form-group">
-        <label>Contraseña</label>
+        <label for="login-pass">Contraseña</label>
         <input type="password" id="login-pass" placeholder="••••••••">
       </div>
+      
       <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="handleLogin()">
         <i class="ti ti-login"></i> Iniciar Sesión
       </button>
-      <div id="login-error" class="login-error-msg" style="display:none;">Usuario o contraseña incorrectos</div>
+      
+      <div id="login-error" class="login-error-msg">Usuario o contraseña incorrectos</div>
     </div>
   </div>
 
-  <div class="layout" id="main-layout" style="display:none">
-    <div class="header">
-      <div class="header-title">
+  <!-- CONTENEDOR PRINCIPAL DE LA APLICACIÓN -->
+  <div class="layout">
+    
+    <!-- BARRA SUPERIOR -->
+    <div class="top-bar">
+      <div class="top-title">
         <div class="logo"><i class="ti ti-spa"></i></div>
         <div>
-          <h1>CRM Leads</h1>
-          <div class="subtitle">Herbolaria Saludable — Control de Prospectos</div>
+          <h1 id="app-title">CRM Leads</h1>
+          <div style="font-size:11px; color:var(--text2); font-weight:normal; margin-top:2px;">
+            Manejo Orgánico y Automatización Sincronizada
+          </div>
         </div>
       </div>
-      <div class="header-actions">
-        <button class="btn btn-primary" onclick="openNewLead()"><i class="ti ti-plus"></i> Nuevo Lead</button>
-        <button class="btn btn-danger" onclick="handleLogout()"><i class="ti ti-logout"></i> Salir</button>
+      <div class="top-actions">
+        <button class="btn btn-primary" onclick="abrirPanelNuevo()"><i class="ti ti-plus"></i> Nuevo Lead</button>
       </div>
     </div>
 
+    <!-- PESTAÑAS DE NAVEGACIÓN -->
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('dashboard',this)"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
-      <div class="tab" onclick="switchTab('leads',this)"><i class="ti ti-users"></i> Todos los Leads</div>
-      <div class="tab" onclick="switchTab('seguimiento',this)"><i class="ti ti-clock"></i> Seguimiento</div>
-      <div class="tab" onclick="switchTab('config',this)"><i class="ti ti-settings"></i> Configuración</div>
+      <div class="tab active" id="t-dashboard" onclick="cambiarTab('dashboard')"><i class="ti ti-chart-bar"></i> Dashboard</div>
+      <div class="tab" id="t-leads" onclick="cambiarTab('leads')"><i class="ti ti-list"></i> Base de Leads</div>
+      <div class="tab" id="t-seguimiento" onclick="cambiarTab('seguimiento')"><i class="ti ti-calendar-event"></i> Seguimiento</div>
+      <div class="tab" id="t-config" onclick="cambiarTab('config')"><i class="ti ti-settings"></i> Configuración</div>
     </div>
 
-    <div id="tab-dashboard"></div>
-    <div id="tab-leads" style="display:none"></div>
-    <div id="tab-seguimiento" style="display:none"></div>
-    <div id="tab-config" style="display:none"></div>
+    <!-- VISTA: DASHBOARD -->
+    <div id="tab-dashboard">
+      <div class="kpi-grid" id="dashboard-kpis"></div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-chart-pie"></i> Distribución por Etapa (Monto)</div>
+          <div class="bar-chart" id="chart-etapas"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-filter"></i> Origen de Prospectos (Cantidad)</div>
+          <div class="bar-chart" id="chart-fuentes"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA: BASE DE LEADS -->
+    <div id="tab-leads" style="display:none;">
+      <div class="filters">
+        <input type="text" id="search-input" placeholder="Buscar por nombre, empresa, tel..." oninput="filtrarLeads()">
+        <select id="filter-etapa" onchange="filtrarLeads()"><option value="">Todas las etapas</option></select>
+        <select id="filter-fuente" onchange="filtrarLeads()"><option value="">Todas las fuentes</option></select>
+        <select id="filter-ejecutivo" onchange="filtrarLeads()"><option value="">Todos los ejecutivos</option></select>
+        <span class="count-label" id="leads-count">Mostrando: 0 leads</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Contacto</th>
+              <th>Producto / Monto</th>
+              <th>Origen / Canal</th>
+              <th>Asignación</th>
+              <th>Estado Pipeline</th>
+              <th>Próx. Seg.</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VISTA: SEGUIMIENTO -->
+    <div id="tab-seguimiento" style="display:none;">
+      <div class="seg-section-title atrasados">
+        <i class="ti ti-alert-circle"></i> <span>SEGUIMIENTOS ATRASADOS / VENCIDOS</span>
+      </div>
+      <div class="table-responsive" style="margin-bottom: 28px;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Teléfono</th>
+              <th>Producto</th>
+              <th>Responsable</th>
+              <th>Fecha Programada</th>
+              <th>Notas Anteriores</th>
+            </tr>
+          </thead>
+          <tbody id="table-seg-atrasados"></tbody>
+        </table>
+      </div>
+
+      <div class="seg-section-title futuros">
+        <i class="ti ti-calendar-check"></i> <span>SEGUIMIENTOS PARA HOY Y FUTUROS</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Teléfono</th>
+              <th>Producto</th>
+              <th>Responsable</th>
+              <th>Fecha Programada</th>
+              <th>Notas Anteriores</th>
+            </tr>
+          </thead>
+          <tbody id="table-seg-futuros"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VISTA: CONFIGURACIÓN -->
+    <div id="tab-config" style="display:none;">
+      <div class="config-container">
+        
+        <div class="config-box">
+          <h3><i class="ti ti-settings-automation"></i> Personalización General de la App</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
+            <div class="form-group">
+              <label for="cfg-nombre-app">Nombre Corporativo de la Aplicación</label>
+              <input type="text" id="cfg-nombre-app">
+            </div>
+            <div class="form-group">
+              <label for="cfg-moneda">Divisa Local</label>
+              <select id="cfg-moneda">
+                <option value="MXN">Pesos Mexicanos (MXN)</option>
+                <option value="USD">Dólares Americanos (USD)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:12px;" onclick="guardarConfigGeneral()"><i class="ti ti-device-floppy"></i> Guardar Cambios Generales</button>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-tournament"></i> Etapas del Pipeline de Ventas</h3>
+          <div class="config-tags-wrapper" id="box-etapas"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-etapa" placeholder="Nueva etapa (ej. Demo Pendiente)">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('pipeline_etapas', 'add-etapa')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-package"></i> Catálogo de Productos / Servicios</h3>
+          <div class="config-tags-wrapper" id="box-productos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-producto" placeholder="Nombre del producto">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('productos', 'add-producto')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-share"></i> Orígenes / Canales de Entrada</h3>
+          <div class="config-tags-wrapper" id="box-fuentes"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-fuente" placeholder="Nueva fuente (ej. TikTok Orgánico)">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('fuentes', 'add-fuente')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-coin"></i> Rangos de Presupuesto Comercial</h3>
+          <div class="config-tags-wrapper" id="box-presupuestos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-presupuesto" placeholder="Ej. $5,000 - $10,000">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('presupuestos', 'add-presupuesto')">Añadir</button>
+          </div>
+        </div>
+        
+      </div>
+    </div>
   </div>
 
-  <div class="overlay" id="overlay" onclick="closePanel(event)">
-    <div class="panel" id="panel">
-      <button class="panel-close" onclick="closePanel()"><i class="ti ti-x"></i></button>
-      <h2 class="panel-title" id="panel-title">Nuevo Lead</h2>
-      
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Nombre del Prospecto *</label>
-          <input type="text" id="n-nombre" placeholder="Ej. Juan Pérez">
-        </div>
-        <div class="form-group">
-          <label>Empresa</label>
-          <input type="text" id="n-empresa" placeholder="Ej. Distribuidora Alfa">
-        </div>
-      </div>
+  <!-- PROYECCIONES INTERACTIVAS (OVERLAY Y PANEL LATERAL) -->
+  <div id="overlay" class="overlay" onclick="togglePanel(false)"></div>
 
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Teléfono</label>
-          <input type="text" id="n-tel" placeholder="Ej. 2221234567">
+  <div id="panel" class="panel-lateral">
+    <div class="panel-header">
+      <h2 id="panel-title"><i class="ti ti-user-plus"></i> Registrar Nuevo Lead</h2>
+      <i class="ti ti-x btn-close-panel" onclick="togglePanel(false)"></i>
+    </div>
+    
+    <div class="panel-body">
+      <form id="lead-form" onsubmit="event.preventDefault();">
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-nombre">Nombre del Prospecto *</label>
+            <input type="text" id="n-nombre" placeholder="Ej. Juan Pérez" required>
+          </div>
+          <div class="form-group">
+            <label for="n-empresa">Empresa / Organización</label>
+            <input type="text" id="n-empresa" placeholder="Ej. Distribuidora Alfa">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Correo</label>
-          <input type="email" id="n-correo" placeholder="Ej. juan@correo.com">
-        </div>
-      </div>
 
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Origen / Canal</label>
-          <select id="n-fuente"></select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-tel">Teléfono de Contacto</label>
+            <input type="text" id="n-tel" placeholder="Ej. 2221234567">
+          </div>
+          <div class="form-group">
+            <label for="n-correo">Correo Electrónico</label>
+            <input type="email" id="n-correo" placeholder="Ej. juan@correo.com">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Producto de Interés</label>
-          <select id="n-producto"></select>
-        </div>
-      </div>
 
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Monto Estimado ($)</label>
-          <input type="number" id="n-monto" placeholder="0.00">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-fuente">Origen / Canal de Entrada</label>
+            <select id="n-fuente"></select>
+          </div>
+          <div class="form-group">
+            <label for="n-producto">Producto de Interés</label>
+            <select id="n-producto"></select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Presupuesto</label>
-          <select id="n-presupuesto"></select>
-        </div>
-      </div>
 
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Área Responsable</label>
-          <select id="n-responsable"></select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-monto">Monto Estimado ($)</label>
+            <input type="number" id="n-monto" placeholder="0.00" step="0.01">
+          </div>
+          <div class="form-group">
+            <label for="n-presupuesto">Rango de Presupuesto</label>
+            <select id="n-presupuesto"></select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Ejecutivo Asignado</label>
-          <select id="n-ejecutivo"></select>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-responsable">Área Responsable</label>
+            <select id="n-responsable"></select>
+          </div>
+          <div class="form-group">
+            <label for="n-ejecutivo">Ejecutivo Asignado</label>
+            <select id="n-ejecutivo"></select>
+          </div>
         </div>
-      </div>
 
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Prioridad</label>
-          <select id="n-prioridad"></select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="n-prioridad">Prioridad</label>
+            <select id="n-prioridad">
+              <option value="baja">Baja</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="n-situacion">Estado del Pipeline</label>
+            <select id="n-situacion"></select>
+          </div>
         </div>
+
         <div class="form-group">
-          <label>Estado del Pipeline</label>
-          <select id="n-situacion"></select>
+          <label for="n-seg">Próximo Seguimiento Agendado</label>
+          <input type="datetime-local" id="n-seg">
         </div>
-      </div>
 
-      <div class="form-group">
-        <label>Próximo Seguimiento</label>
-        <input type="datetime-local" id="n-seg">
-      </div>
+        <div class="form-group">
+          <label for="n-notas">Notas y Bitácora de Seguimiento</label>
+          <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del primer contacto..."></textarea>
+        </div>
 
-      <div class="form-group">
-        <label>Notas y Bitácora de Seguimiento</label>
-        <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del contacto..."></textarea>
-      </div>
-
-      <div class="panel-actions">
-        <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" onclick="eliminarLeadActual()">
-          <i class="ti ti-trash"></i> Eliminar Lead
-        </button>
-        <div style="display:flex; gap:8px; margin-left:auto;">
-          <button class="btn" onclick="closePanel()">Cancelar</button>
-          <button class="btn btn-primary" onclick="guardarLeadFormulario()">
-            <i class="ti ti-device-floppy"></i> Guardar Prospecto
+        <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:center;">
+          <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" type="button" onclick="eliminarLeadActual()">
+            <i class="ti ti-trash"></i> Eliminar
           </button>
+          <div style="display:flex; gap:8px; margin-left:auto;">
+            <button class="btn btn-secondary" type="button" onclick="togglePanel(false)">Cancelar</button>
+            <button class="btn btn-primary" type="button" onclick="guardarLeadFormulario()">
+              <i class="ti ti-device-floppy"></i> Guardar Prospecto
+            </button>
+          </div>
         </div>
-      </div>
+        
+      </form>
     </div>
   </div>
 
+  <!-- LOGICA Y LIBS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js"></script>
+  <script src="app/app.js"></script>
 </body>
 </html>

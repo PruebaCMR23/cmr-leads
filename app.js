@@ -2,6 +2,8 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // CREDENCIALES EXCLUSIVAS ACTUALIZADAS
 const AUTH_USER = "Herbolaria";
 const AUTH_PASS = "Saludable*"; 
@@ -11,6 +13,8 @@ let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
 let PRESUPUESTOS = [];
+let PIPELINE_ETAPAS = [];
+
 let RESPONSABLES = ['Marketing Digital', 'Ventas Online', 'Gerencia de Ventas', 'Gerencia General'];
 let EJECUTIVOS = [
   "Pilar Gonzalez - marketing digital",
@@ -18,776 +22,517 @@ let EJECUTIVOS = [
   "Yessica Carrillo - Gerencia de Ventas (Ventas Mayoreo)",
   "Emmanuel Zúñiga - Gerencia General"
 ];
-let PIPELINE_ETAPAS = [];
-let LEADS_GLOBAL = [];
 
-// Instancia global de Supabase Client
-const { createClient } = supabase;
-const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+let LEADS = [];
+let currentEditingLeadId = null; 
 
-// ─── FUNCIÓN DE CAMBIO DE PESTAÑAS (TABS) ──────────────────────────────────────
-function cambiarTab(tabName) {
+// ─── SISTEMA DE AUTENTICACIÓN (LOGIN ORIGINAL) ─────────────────────────────────
+function handleLogin() {
+  const u = document.getElementById('login-user').value;
+  const p = document.getElementById('login-pass').value;
+  
+  const masterMatch = (u === AUTH_USER && p === AUTH_PASS);
+  const extraMatch = ADMINS.some(admin => admin.user === u && admin.pass === p);
+
+  if (masterMatch || extraMatch) {
+    sessionStorage.setItem('crm_logged_in', 'true');
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    
+    // Renderizado estructurado inicial
+    renderDashboard();
+    verificarSeguimientosHoy(LEADS);
+  } else {
+    const err = document.getElementById('login-error');
+    err.style.display = 'block';
+    setTimeout(() => { err.style.display = 'none'; }, 5000);
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem('crm_logged_in');
+  window.location.reload();
+}
+
+// ─── CONTROL DE CAMBIO DE PESTAÑAS (MÉTODO ORIGINAL ORIGINAL '0') ───────────────
+function switchTab(tabName, element) {
   const tabs = ['dashboard', 'leads', 'seguimiento', 'config'];
   tabs.forEach(t => {
-    const elTab = document.getElementById(`tab-${t}`);
-    const elBtn = document.getElementById(`t-${t}`);
-    if (elTab) elTab.style.display = (t === tabName) ? 'block' : 'none';
-    if (elBtn) {
-      if (t === tabName) elBtn.classList.add('active');
-      else elBtn.classList.remove('active');
-    }
+    const el = document.getElementById(`tab-${t}`);
+    if (el) el.style.display = (t === tabName) ? 'block' : 'none';
   });
+  
+  if (element) {
+    const allTabs = element.parentElement.querySelectorAll('.tab');
+    allTabs.forEach(t => t.classList.remove('active'));
+    element.classList.add('active');
+  }
 
-  if (tabName === 'dashboard') renderDashboardCharts(LEADS_GLOBAL);
-  if (tabName === 'leads') filtrarLeads();
-  if (tabName === 'seguimiento') cargarSeguimientosInterfaz(LEADS_GLOBAL);
+  // Desencadenar renderizado oportuno
+  if (tabName === 'dashboard') renderDashboard();
+  if (tabName === 'leads') renderLeadsTable();
+  if (tabName === 'seguimiento') renderSeguimientoTab();
+  if (tabName === 'config') renderConfigTab();
 }
 
-// ─── MANEJO DE CONFIGURACIONES DESDE SUPABASE ──────────────────────────────────
+// ─── SYNC SUPABASE DATA ───────────────────────────────────────────────────────
 async function cargarDatosDesdeSupabase() {
   try {
-    const { data: configData, error: configError } = await _supabase
-      .from('configuracion')
-      .select('*')
-      .eq('id', 1)
-      .single();
-
-    if (!configError && configData) {
-      document.getElementById('app-title').innerText = configData.nombre_app || 'CRM Leads';
-      document.getElementById('cfg-nombre-app').value = configData.nombre_app || '';
-      document.getElementById('cfg-moneda').value = configData.moneda || 'MXN';
-
-      ADMINS = configData.admins || [];
-      FUENTES = configData.fuentes || [];
-      PRODUCTOS = configData.productos || [];
-      PRESUPUESTOS = configData.presupuestos || [];
-      if (configData.responsables && configData.responsables.length > 0) RESPONSABLES = configData.responsables;
-      if (configData.ejecutives && configData.ejecutives.length > 0) EJECUTIVOS = configData.ejecutives;
-      PIPELINE_ETAPAS = configData.pipeline_etapas || [];
+    const { data: configData } = await _supabase.from('crm_config').select('*');
+    if (configData) {
+      FUENTES = configData.filter(c => c.tipo === 'fuentes').map(c => c.valor);
+      PRODUCTOS = configData.filter(c => c.tipo === 'productos').map(c => c.valor);
+      PRESUPUESTOS = configData.filter(c => c.tipo === 'presupuestos').map(c => c.valor);
+      PIPELINE_ETAPAS = configData.filter(c => c.tipo === 'pipeline_etapas').map(c => c.valor);
+      ADMINS = configData.filter(c => c.tipo === 'admins').map(c => JSON.parse(c.valor));
     }
 
-    const { data: leadsData, error: leadsError } = await _supabase
-      .from('leads')
-      .select('*')
-      .order('fechacreacion', { ascending: false });
-
-    if (!leadsError && leadsData) {
-      LEADS_GLOBAL = leadsData;
-    }
-
+    const { data: leadsData } = await _supabase.from('crm_leads').select('*').order('created_at', { ascending: false });
+    LEADS = leadsData || [];
+    
     actualizarSelectsFormulario();
-    actualizarSelectsFiltros();
-    llenarConfiguracionVisual();
-
-    renderDashboardKPIs(LEADS_GLOBAL);
-    renderDashboardCharts(LEADS_GLOBAL);
-    renderTableLeads(LEADS_GLOBAL);
-    cargarSeguimientosInterfaz(LEADS_GLOBAL);
-
-    verificarSeguimientosHoy(LEADS_GLOBAL);
-
   } catch (err) {
-    console.error("Error en sincronización inicial:", err);
+    console.error("Error cargando base remota Supabase:", err);
   }
 }
 
-// ─── LLENADO DINÁMICO DE SELECTORES (FORMULARIO) ──────────────────────────────
 function actualizarSelectsFormulario() {
-  llenarSelect('n-fuente', FUENTES, 'Selecciona origen...');
-  llenarSelect('n-producto', PRODUCTOS, 'Selecciona producto...');
-  llenarSelect('n-presupuesto', PRESUPUESTOS, 'Selecciona rango...');
-  llenarSelect('n-responsable', RESPONSABLES, 'Selecciona área...');
-  llenarSelect('n-ejecutivo', EJECUTIVOS, 'Selecciona asesor...');
-  llenarSelect('n-situacion', PIPELINE_ETAPAS, 'Selecciona etapa...');
+  const f = document.getElementById('n-fuente');
+  const p = document.getElementById('n-producto');
+  const b = document.getElementById('n-presupuesto');
+  const s = document.getElementById('n-situacion');
+  const r = document.getElementById('n-responsable');
+  const e = document.getElementById('n-ejecutivo');
 
-  const prioSel = document.getElementById('n-prioridad');
-  if (prioSel) {
-    prioSel.innerHTML = `
-      <option value="Baja">Baja</option>
-      <option value="Media" selected>Media</option>
-      <option value="Alta">Alta</option>
-    `;
-  }
+  if(f) f.innerHTML = FUENTES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(p) p.innerHTML = PRODUCTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(b) b.innerHTML = PRESUPUESTOS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(s) s.innerHTML = PIPELINE_ETAPAS.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(r) r.innerHTML = RESPONSABLES.map(x => `<option value="${x}">${x}</option>`).join('');
+  if(e) e.innerHTML = EJECUTIVOS.map(x => `<option value="${x}">${x}</option>`).join('');
 }
 
-function llenarSelect(elementId, arrayData, placeholder) {
-  const sel = document.getElementById(elementId);
-  if (!sel) return;
-  let html = `<option value="">${placeholder}</option>`;
-  arrayData.forEach(item => {
-    html += `<option value="${item}">${item}</option>`;
-  });
-  sel.innerHTML = html;
-}
-
-// ─── LLENADO DINÁMICO DE SELECTORES (FILTROS DE BÚSQUEDA) ──────────────────────
-function actualizarSelectsFiltros() {
-  llenarSelectFiltro('filter-etapa', PIPELINE_ETAPAS, 'Todas las etapas');
-  llenarSelectFiltro('filter-fuente', FUENTES, 'Todas las fuentes');
-  llenarSelectFiltro('filter-ejecutivo', EJECUTIVOS, 'Todos los ejecutivos');
-}
-
-function llenarSelectFiltro(elementId, arrayData, placeholder) {
-  const sel = document.getElementById(elementId);
-  if (!sel) return;
-  let html = `<option value="">${placeholder}</option>`;
-  arrayData.forEach(item => {
-    html += `<option value="${item}">${item}</option>`;
-  });
-  sel.innerHTML = html;
-}
-
-// ─── MÓDULO VISUAL DE CONFIGURACIÓN DE PARÁMETROS ──────────────────────────────
-function llenarConfiguracionVisual() {
-  renderTagsConfig('box-etapas', PIPELINE_ETAPAS, 'pipeline_etapas');
-  renderTagsConfig('box-productos', PRODUCTOS, 'productos');
-  renderTagsConfig('box-fuentes', FUENTES, 'fuentes');
-  renderTagsConfig('box-ejecutivos', EJECUTIVOS, 'ejecutives');
-
-  const userBox = document.getElementById('box-usuarios');
-  if (userBox) {
-    let html = '';
-    ADMINS.forEach((u, index) => {
-      html += `
-        <div class="config-tag" style="border-radius:6px; padding:6px 12px; margin-bottom:6px; display:flex; justify-content:between; width:100%; max-width:400px;">
-          <span><strong>${u.user}</strong> (Pass: ${u.pass})</span>
-          <i class="ti ti-x" style="cursor:pointer; color:#a32d2d; margin-left:auto;" onclick="eliminarUsuarioConfig(${index})"></i>
-        </div>
-      `;
-    });
-    userBox.innerHTML = html || '<div style="font-size:12px; color:var(--text3);">No hay usuarios adicionales configurados.</div>';
-  }
-}
-
-function renderTagsConfig(containerId, arrayData, campoSql) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  let html = '';
-  arrayData.forEach((item, index) => {
-    html += `
-      <div class="config-tag">
-        <span>${item}</span>
-        <i class="ti ti-x" style="cursor:pointer;" onclick="eliminarElementoConfig('${campoSql}', ${index})"></i>
-      </div>
-    `;
-  });
-  container.innerHTML = html || '<span style="font-size:12px; color:var(--text3);">Lista vacía.</span>';
-}
-
-// ─── GUARDAR CAMBIOS DE CONFIGURACIÓN EN SUPABASE ──────────────────────────────
-async function guardarConfigGeneral() {
-  const nombre = document.getElementById('cfg-nombre-app').value.trim();
-  const moneda = document.getElementById('cfg-moneda').value;
-
-  if (!nombre) return alert("El nombre de la aplicación no puede estar vacío.");
-
-  try {
-    const { error } = await _supabase
-      .from('configuracion')
-      .update({ nombre_app: nombre, moneda: moneda })
-      .eq('id', 1);
-
-    if (error) throw error;
-    showNotification("Configuración general guardada con éxito.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error al guardar: " + err.message);
-  }
-}
-
-async function agregarElementoConfig(campoSql, inputId) {
-  const inp = document.getElementById(inputId);
-  if (!inp) return;
-  const valor = inp.value.trim();
-  if (!valor) return alert("Ingresa un valor válido.");
-
-  let arrayActual = [];
-  if (campoSql === 'pipeline_etapas') arrayActual = [...PIPELINE_ETAPAS];
-  if (campoSql === 'productos') arrayActual = [...PRODUCTOS];
-  if (campoSql === 'fuentes') arrayActual = [...FUENTES];
-  if (campoSql === 'ejecutives') arrayActual = [...EJECUTIVOS];
-
-  if (arrayActual.includes(valor)) return alert("Ese elemento ya existe.");
-  arrayActual.push(valor);
-
-  try {
-    const payload = {};
-    payload[campoSql] = arrayActual;
-
-    const { error } = await _supabase
-      .from('configuracion')
-      .update(payload)
-      .eq('id', 1);
-
-    if (error) throw error;
-    inp.value = '';
-    showNotification("Elemento añadido correctamente.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error: " + err.message);
-  }
-}
-
-async function eliminarElementoConfig(campoSql, index) {
-  if (!confirm("¿Deseas remover este parámetro de la configuración?")) return;
-
-  let arrayActual = [];
-  if (campoSql === 'pipeline_etapas') arrayActual = [...PIPELINE_ETAPAS];
-  if (campoSql === 'productos') arrayActual = [...PRODUCTOS];
-  if (campoSql === 'fuentes') arrayActual = [...FUENTES];
-  if (campoSql === 'ejecutives') arrayActual = [...EJECUTIVOS];
-
-  arrayActual.splice(index, 1);
-
-  try {
-    const payload = {};
-    payload[campoSql] = arrayActual;
-
-    const { error } = await _supabase
-      .from('configuracion')
-      .update(payload)
-      .eq('id', 1);
-
-    if (error) throw error;
-    showNotification("Elemento removido.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error: " + err.message);
-  }
-}
-
-async function agregarUsuarioConfig() {
-  const nameInp = document.getElementById('add-user-name');
-  const passInp = document.getElementById('add-user-pass');
-  const user = nameInp.value.trim();
-  const pass = passInp.value.trim();
-
-  if (!user || !pass) return alert("Completa usuario y contraseña.");
-
-  const nuevosAdmins = [...ADMINS, { user, pass }];
-
-  try {
-    const { error } = await _supabase
-      .from('configuracion')
-      .update({ admins: nuevosAdmins })
-      .eq('id', 1);
-
-    if (error) throw error;
-    nameInp.value = '';
-    passInp.value = '';
-    showNotification("Usuario registrado con éxito.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error: " + err.message);
-  }
-}
-
-async function eliminarUsuarioConfig(index) {
-  if (!confirm("¿Remover el acceso para este usuario?")) return;
-  const nuevosAdmins = [...ADMINS];
-  nuevosAdmins.splice(index, 1);
-
-  try {
-    const { error } = await _supabase
-      .from('configuracion')
-      .update({ admins: nuevosAdmins })
-      .eq('id', 1);
-
-    if (error) throw error;
-    showNotification("Usuario eliminado.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error: " + err.message);
-  }
-}
-
-// ─── RENDIMIENTO Y CÁLCULOS DEL DASHBOARD (MÉTRICAS) ──────────────────────────
-function renderDashboardKPIs(leads) {
-  const totalLeads = leads.length;
-  
-  let montoTotalPipeline = 0;
-  let leadsActivos = 0;
-  let leadsCerradosGanados = 0;
-
-  leads.forEach(l => {
-    const m = parseFloat(l.monto) || 0;
-    if (l.estado === 'Cerrado Ganado') {
-      leadsCerradosGanados++;
-      montoTotalPipeline += m; 
-    } else if (l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado') {
-      leadsActivos++;
-      montoTotalPipeline += m;
-    }
-  });
-
-  const tasaConversion = totalLeads > 0 ? ((leadsCerradosGanados / totalLeads) * 100).toFixed(1) : 0;
-  const divisa = document.getElementById('cfg-moneda') ? document.getElementById('cfg-moneda').value : 'MXN';
-
-  const grid = document.getElementById('dashboard-kpis');
-  if (!grid) return;
-
-  grid.innerHTML = `
-    <div class="kpi">
-      <div class="kpi-label">Prospectos Totales</div>
-      <div class="kpi-val blue">${totalLeads}</div>
-      <div class="kpi-sub">Registrados en total</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Valor del Pipeline</div>
-      <div class="kpi-val green">$${montoTotalPipeline.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
-      <div class="kpi-sub">Activos + Ganados (${divisa})</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Leads en Proceso</div>
-      <div class="kpi-val amber">${leadsActivos}</div>
-      <div class="kpi-sub">Negociaciones vivas</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Tasa de Cierre</div>
-      <div class="kpi-val">${tasaConversion}%</div>
-      <div class="kpi-sub">Ganados vs Totales</div>
-    </div>
-  `;
-}
-
-// RENDERIZADO GRÁFICO PERSONALIZADO (BAR-CHARTS HTML/CSS)
-function renderDashboardCharts(leads) {
-  const chartEtapas = document.getElementById('chart-etapas');
-  if (chartEtapas) {
-    const montosPorEtapa = {};
-    PIPELINE_ETAPAS.forEach(e => montosPorEtapa[e] = 0);
-    
-    let maxMonto = 0;
-    leads.forEach(l => {
-      const e = l.estado || 'Nuevo';
-      const m = parseFloat(l.monto) || 0;
-      if (montosPorEtapa[e] !== undefined) {
-        montosPorEtapa[e] += m;
-      } else {
-        montosPorEtapa[e] = m;
-      }
-    });
-
-    Object.values(montosPorEtapa).forEach(v => { if (v > maxMonto) maxMonto = v; });
-
-    let html = '';
-    Object.keys(montosPorEtapa).forEach(etapa => {
-      const monto = montosPorEtapa[etapa];
-      const pct = maxMonto > 0 ? (monto / maxMonto) * 100 : 0;
-      html += `
-        <div class="bar-row">
-          <div class="bar-label" title="${etapa}">${etapa}</div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width: ${pct}%; background: var(--green);"></div>
-          </div>
-          <div class="bar-count" style="width:70px; font-size:11px;">$${monto.toLocaleString('es-MX')}</div>
-        </div>
-      `;
-    });
-    chartEtapas.innerHTML = html || '<div class="empty">Sin datos suficientes</div>';
-  }
-
-  const chartFuentes = document.getElementById('chart-fuentes');
-  if (chartFuentes) {
-    const conteoFuentes = {};
-    FUENTES.forEach(f => conteoFuentes[f] = 0);
-    conteoFuentes['No Especificado'] = 0;
-
-    let maxCant = 0;
-    leads.forEach(l => {
-      const f = l.fuente || 'No Especificado';
-      if (conteoFuentes[f] !== undefined) conteoFuentes[f]++;
-      else conteoFuentes[f] = 1;
-    });
-
-    Object.values(conteoFuentes).forEach(v => { if (v > maxCant) maxCant = v; });
-
-    let html = '';
-    Object.keys(conteoFuentes).forEach(f => {
-      const cant = conteoFuentes[f];
-      if (cant === 0 && f === 'No Especificado') return; 
-      const pct = maxCant > 0 ? (cant / maxCant) * 100 : 0;
-      html += `
-        <div class="bar-row">
-          <div class="bar-label" title="${f}">${f}</div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width: ${pct}%; background: #185fa5;"></div>
-          </div>
-          <div class="bar-count">${cant}</div>
-        </div>
-      `;
-    });
-    chartFuentes.innerHTML = html || '<div class="empty">Sin datos suficientes</div>';
-  }
-}
-
-// ─── RENDERIZADO Y CONTROL DE LA TABLA DE LEADS ───────────────────────────────
-function renderTableLeads(leads) {
-  const tbody = document.getElementById('table-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (leads.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">No se encontraron leads con los criterios seleccionados.</td></tr>`;
-    return;
-  }
-
-  leads.forEach(l => {
-    const tr = document.createElement('tr');
-    tr.onclick = () => abrirPanelEditar(l);
-
-    const inicial = l.nombre ? l.nombre.charAt(0).toUpperCase() : '?';
-    const montoNum = parseFloat(l.monto) || 0;
-    const divisa = document.getElementById('cfg-moneda') ? document.getElementById('cfg-moneda').value : 'MXN';
-
-    let badgeClass = 'b-nuevo';
-    const est = (l.estado || 'Nuevo').toLowerCase();
-    if (est.includes('nuevo')) badgeClass = 'b-nuevo';
-    else if (est.includes('contactado')) badgeClass = 'b-contactado';
-    else if (est.includes('calificado')) badgeClass = 'b-calificado';
-    else if (est.includes('propuesta')) badgeClass = 'b-propuesta';
-    else if (est.includes('negociación') || est.includes('negociacion')) badgeClass = 'b-negociacion';
-    else if (est.includes('ganado') || est.includes('cerrado ganado')) badgeClass = 'b-cerrado';
-    else if (est.includes('perdido') || est.includes('cerrado perdido')) badgeClass = 'b-perdido';
-    else if (est.includes('abandonado')) badgeClass = 'b-abandonado';
-
-    let badgePrio = 'b-media';
-    const prio = (l.prioridad || 'Media').toLowerCase();
-    if (prio === 'alta') badgePrio = 'b-alta';
-    if (prio === 'baja') badgePrio = 'b-baja';
-
-    let cleanPhone = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-    let waHtml = '—';
-    if (cleanPhone) {
-      if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
-      waHtml = `
-        <a class="wa-link" href="https://wa.me/${cleanPhone}" target="_blank" onclick="event.stopPropagation();">
-          <i class="ti ti-brand-whatsapp"></i> ${l.telefono}
-        </a>
-      `;
-    }
-
-    let fechaSegStr = '—';
-    if (l.proximoseg) {
-      const fSeg = new Date(l.proximoseg);
-      if (!isNaN(fSeg.getTime())) {
-        fechaSegStr = fSeg.toLocaleDateString('es-MX') + ' ' + fSeg.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      }
-    }
-
-    tr.innerHTML = `
-      <td>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <div class="avatar">${inicial}</div>
-          <div>
-            <div class="td-name">${l.nombre || 'Sin Nombre'}</div>
-            <div class="td-muted">${l.empresa || 'Particular'}</div>
-          </div>
-        </div>
-      </td>
-      <td>
-        <div>${waHtml}</div>
-        <div class="td-muted" style="font-size:11px;">${l.correo || 'Sin correo'}</div>
-      </td>
-      <td>
-        <strong>$${montoNum.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
-        <div class="td-muted">${l.producto || 'No seleccionado'}</div>
-      </td>
-      <td>
-        <span style="font-size:12px;">${l.fuente || 'Desconocido'}</span>
-      </td>
-      <td>
-        <div style="font-size:12px;">${l.ejecutivo || 'Sin Asignar'}</div>
-        <div class="td-muted" style="font-size:10px;">${l.responsable || 'Sin Área'}</div>
-      </td>
-      <td>
-        <span class="badge ${badgeClass}">${l.estado || 'Nuevo'}</span>
-        <span class="badge ${badgePrio}" style="margin-left:4px; font-size:9px; padding:1px 5px;">${l.prioridad || 'Media'}</span>
-      </td>
-      <td style="font-size:12px; font-weight:500;">
-        ${fechaSegStr}
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-// FILTRADO DINÁMICO EN TIEMPO REAL
-function filtrarLeads() {
-  const query = document.getElementById('search-input').value.toLowerCase();
-  const fEtapa = document.getElementById('filter-etapa').value;
-  const fFuente = document.getElementById('filter-fuente').value;
-  const fEjecutivo = document.getElementById('filter-ejecutivo').value;
-
-  const filtrados = LEADS_GLOBAL.filter(l => {
-    const matchQuery = (l.nombre || '').toLowerCase().includes(query) ||
-                       (l.empresa || '').toLowerCase().includes(query) ||
-                       (l.telefono || '').includes(query) ||
-                       (l.notas || '').toLowerCase().includes(query);
-
-    const matchEtapa = fEtapa === '' || l.estado === fEtapa;
-    const matchFuente = fFuente === '' || l.fuente === fFuente;
-    const matchEjecutivo = fEjecutivo === '' || l.ejecutivo === fEjecutivo;
-
-    return matchQuery && matchEtapa && matchFuente && matchEjecutivo;
-  });
-
-  renderTableLeads(filtrados);
-  
-  const lbl = document.getElementById('leads-count');
-  if (lbl) lbl.innerText = `Mostrando: ${filtrados.length} leads`;
-}
-
-// ─── CONTROL DE LA PESTAÑA DE SEGUIMIENTOS AGENDADOS ───────────────────────────
-function cargarSeguimientosInterfaz(leads) {
-  const tAtrasados = document.getElementById('table-seg-atrasados');
-  const tFuturos = document.getElementById('table-seg-futuros');
-
-  if (!tAtrasados || !tFuturos) return;
-
-  tAtrasados.innerHTML = '';
-  tFuturos.innerHTML = '';
-
-  const ahora = new Date();
-  let countAtrasados = 0;
-  let countFuturos = 0;
-
-  leads.forEach(l => {
-    if (!l.proximoseg) return; 
-    
-    // Ignorar cerrados o descartados de la lista activa de seguimientos
-    if (l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return;
-
-    const fSeg = new Date(l.proximoseg);
-    if (isNaN(fSeg.getTime())) return;
-
-    const tr = document.createElement('tr');
-    tr.onclick = () => abrirPanelEditar(l);
-
-    let cleanPhone = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-    let waHtml = '—';
-    if (cleanPhone) {
-      if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
-      waHtml = `<a class="wa-link" href="https://wa.me/${cleanPhone}" target="_blank" onclick="event.stopPropagation();"><i class="ti ti-brand-whatsapp"></i> ${l.telefono}</a>`;
-    }
-
-    const fechaFormateada = fSeg.toLocaleDateString('es-MX') + ' ' + fSeg.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-
-    tr.innerHTML = `
-      <td><strong>${l.nombre || 'Sin Nombre'}</strong><div style="font-size:11px; color:var(--text2);">${l.empresa || 'Particular'}</div></td>
-      <td>${waHtml}</td>
-      <td>${l.producto || '—'}<div style="font-size:11px; color:var(--text3);">$${(parseFloat(l.monto)||0).toLocaleString('es-MX')}</div></td>
-      <td><span style="font-size:12px;">${l.ejecutivo || 'Sin ejecutivo'}</span></td>
-      <td><span style="font-weight:600;">${fechaFormateada}</span></td>
-      <td><div style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px;" title="${l.notas||''}">${l.notas || 'Sin notas.'}</div></td>
-    `;
-
-    if (fSeg < ahora) {
-      tAtrasados.appendChild(tr);
-      countAtrasados++;
-    } else {
-      tFuturos.appendChild(tr);
-      countFuturos++;
-    }
-  });
-
-  if (countAtrasados === 0) {
-    tAtrasados.innerHTML = `<tr><td colspan="6" class="empty" style="color:var(--green);"><i class="ti ti-circle-check"></i> ¡Excelente! No tienes ningún seguimiento atrasado.</td></tr>`;
-  }
-  if (countFuturos === 0) {
-    tFuturos.innerHTML = `<tr><td colspan="6" class="empty">No hay próximos seguimientos agendados en el sistema.</td></tr>`;
-  }
-}
-
-// ─── APERTURA Y EDICIÓN DE LEADS (MODAL CRUD) ──────────────────────────────────
-function abrirPanelNuevo() {
-  document.getElementById('panel-title-text').innerText = "Nuevo Lead / Registro";
-  document.getElementById('n-id').value = '';
+// ─── PANEL LATERAL INTERACTIVO (MÉTODO ORIGINAL '0') ──────────────────────────
+function openNewLead() {
+  currentEditingLeadId = null;
+  document.getElementById('panel-title').innerText = "Nuevo Lead";
+  document.getElementById('btn-delete-lead').style.display = 'none';
   
   document.getElementById('n-nombre').value = '';
   document.getElementById('n-empresa').value = '';
-  document.getElementById('n-telefono').value = '';
+  document.getElementById('n-tel').value = '';
   document.getElementById('n-correo').value = '';
-  document.getElementById('n-estado-geo').value = '';
-  document.getElementById('n-pais').value = 'México';
-  
-  document.getElementById('n-fuente').value = '';
-  document.getElementById('n-producto').value = '';
-  document.getElementById('n-presupuesto').value = '';
-  document.getElementById('n-monto').value = 0;
-  document.getElementById('n-responsable').value = '';
-  document.getElementById('n-ejecutivo').value = '';
-  document.getElementById('n-prioridad').value = 'Media';
-  document.getElementById('n-situacion').value = PIPELINE_ETAPAS[0] || '';
+  document.getElementById('n-monto').value = '';
   document.getElementById('n-seg').value = '';
   document.getElementById('n-notas').value = '';
 
-  const btnDel = document.getElementById('btn-delete-lead');
-  if (btnDel) btnDel.style.display = 'none';
-
-  togglePanel(true);
+  document.getElementById('overlay').classList.add('active');
+  document.getElementById('panel').classList.add('active');
 }
 
-function abrirPanelEditar(lead) {
-  document.getElementById('panel-title-text').innerText = "Expediente y Modificación de Lead";
-  document.getElementById('n-id').value = lead.id;
-  
+function openEditLead(id) {
+  const lead = LEADS.find(l => l.id === id || l.id.toString() === id.toString());
+  if (!lead) return;
+
+  currentEditingLeadId = lead.id;
+  document.getElementById('panel-title').innerText = "Editar Lead";
+  document.getElementById('btn-delete-lead').style.display = 'block';
+
   document.getElementById('n-nombre').value = lead.nombre || '';
   document.getElementById('n-empresa').value = lead.empresa || '';
-  document.getElementById('n-telefono').value = lead.telefono || '';
+  document.getElementById('n-tel').value = lead.telefono || '';
   document.getElementById('n-correo').value = lead.correo || '';
-  document.getElementById('n-estado-geo').value = lead.estado_geo || '';
-  document.getElementById('n-pais').value = lead.pais || 'México';
-  
   document.getElementById('n-fuente').value = lead.fuente || '';
   document.getElementById('n-producto').value = lead.producto || '';
+  document.getElementById('n-monto').value = lead.monto || '';
   document.getElementById('n-presupuesto').value = lead.presupuesto || '';
-  document.getElementById('n-monto').value = lead.monto || 0;
   document.getElementById('n-responsable').value = lead.responsable || '';
   document.getElementById('n-ejecutivo').value = lead.ejecutivo || '';
   document.getElementById('n-prioridad').value = lead.prioridad || 'Media';
-  document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
-  
-  if (lead.proximoseg) {
-    const localDate = new Date(lead.proximoseg);
-    if (!isNaN(localDate.getTime())) {
-      consttzOffset = localDate.getTimezoneOffset() * 60000;
-      const localISOTime = (new Date(localDate.getTime() - consttzOffset)).toISOString().slice(0, 16);
-      document.getElementById('n-seg').value = localISOTime;
-    } else {
-      document.getElementById('n-seg').value = '';
-    }
-  } else {
-    document.getElementById('n-seg').value = '';
-  }
-  
+  document.getElementById('n-situacion').value = lead.estado || '';
+  document.getElementById('n-seg').value = lead.proximoseg || '';
   document.getElementById('n-notas').value = lead.notas || '';
 
-  const btnDel = document.getElementById('btn-delete-lead');
-  if (btnDel) btnDel.style.display = 'inline-flex';
-
-  togglePanel(true);
+  document.getElementById('overlay').classList.add('active');
+  document.getElementById('panel').classList.add('active');
 }
 
-// ACCIÓN DE INSERCIÓN O ACTUALIZACIÓN EN SUPABASE
-async function guardarLeadSupabase() {
-  const id = document.getElementById('n-id').value;
-  const nombre = document.getElementById('n-nombre').value.trim();
-  
-  if (!nombre) return alert("El nombre del cliente es un campo obligatorio.");
-
-  const fSegValue = document.getElementById('n-seg').value;
-  let proximosegISO = null;
-  if (fSegValue) {
-    const d = new Date(fSegValue);
-    if (!isNaN(d.getTime())) proximosegISO = d.toISOString();
+function closePanel(e) {
+  if (!e || e.target.id === 'overlay' || e.currentTarget.classList.contains('panel-close') || e.target.classList.contains('ti-x')) {
+    document.getElementById('overlay').classList.remove('active');
+    document.getElementById('panel').classList.remove('active');
   }
+}
+
+// ─── GUARDAR Y ACTUALIZAR FORMULARIO (MÉTODO SUPABASE) ────────────────────────
+async function guardarLeadFormulario() {
+  const nombre = document.getElementById('n-nombre').value.trim();
+  if (!nombre) { alert('El nombre del prospecto es obligatorio.'); return; }
 
   const payload = {
-    nombre: nombre,
+    nombre,
     empresa: document.getElementById('n-empresa').value.trim(),
-    telefono: document.getElementById('n-telefono').value.trim(),
+    telefono: document.getElementById('n-tel').value.trim(),
     correo: document.getElementById('n-correo').value.trim(),
-    estado_geo: document.getElementById('n-estado-geo').value.trim(),
-    pais: document.getElementById('n-pais').value.trim(),
     fuente: document.getElementById('n-fuente').value,
     producto: document.getElementById('n-producto').value,
-    presupuesto: document.getElementById('n-presupuesto').value,
     monto: parseFloat(document.getElementById('n-monto').value) || 0,
+    presupuesto: document.getElementById('n-presupuesto').value,
     responsable: document.getElementById('n-responsable').value,
     ejecutivo: document.getElementById('n-ejecutivo').value,
     prioridad: document.getElementById('n-prioridad').value,
     estado: document.getElementById('n-situacion').value,
-    proximoseg: proximosegISO,
-    notas: document.getElementById('n-notas').value.trim(),
-    fechaactualizacion: new Date().toISOString()
+    proximoseg: document.getElementById('n-seg').value || null,
+    notas: document.getElementById('n-notas').value.trim()
   };
 
-  try {
-    if (id) {
-      const { error } = await _supabase
-        .from('leads')
-        .update(payload)
-        .eq('id', id);
-      if (error) throw error;
-      showNotification("Expediente de lead actualizado.");
-    } else {
-      const { error } = await _supabase
-        .from('leads')
-        .insert([payload]);
-      if (error) throw error;
-      showNotification("Nuevo prospecto registrado con éxito.");
-    }
-
-    togglePanel(false);
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error al guardar datos: " + err.message);
+  if (currentEditingLeadId) {
+    const { error } = await _supabase.from('crm_leads').update(payload).eq('id', currentEditingLeadId);
+    if(error) alert("Error actualizando lead: " + error.message);
+  } else {
+    const { error } = await _supabase.from('crm_leads').insert([payload]);
+    if(error) alert("Error insertando lead: " + error.message);
   }
+
+  await cargarDatosDesdeSupabase();
+  closePanel();
+  
+  // Refrescar vista activa
+  if (document.getElementById('tab-dashboard').style.display === 'block') renderDashboard();
+  else renderLeadsTable();
 }
 
 async function eliminarLeadActual() {
-  const id = document.getElementById('n-id').value;
-  if (!id) return;
-  
-  if (!confirm("¿Estás completamente seguro de eliminar permanentemente este registro de lead? Esta acción no se puede deshacer.")) return;
+  if (!currentEditingLeadId) return;
+  if (!confirm("¿Estás completamente seguro de eliminar este prospecto del CRM?")) return;
 
-  try {
-    const { error } = await _supabase
-      .from('leads')
-      .delete()
-      .eq('id', id);
+  const { error } = await _supabase.from('crm_leads').delete().eq('id', currentEditingLeadId);
+  if (error) alert("Error al eliminar de Supabase: " + error.message);
 
-    if (error) throw error;
-    showNotification("Lead eliminado del CRM.");
-    togglePanel(false);
-    await cargarDatosDesdeSupabase();
-  } catch (err) {
-    alert("Error al eliminar: " + err.message);
-  }
+  await cargarDatosDesdeSupabase();
+  closePanel();
+  if (document.getElementById('tab-dashboard').style.display === 'block') renderDashboard();
+  else renderLeadsTable();
 }
 
-// ─── CONTROL DE NOTIFICACIONES TOAST (UI) ──────────────────────────────────────
-function showNotification(msg) {
-  const notif = document.getElementById('notif');
-  if (!notif) return;
-  notif.innerText = msg;
-  notif.classList.add('show');
-  setTimeout(() => {
-    notif.classList.remove('show');
-  }, 3500);
+// ─── RENDERS DE INTERFAZ ORIGINAL COMPLETA ─────────────────────────────────────
+
+// 1. RENDEREADO DEL DASHBOARD (GRÁFICOS CSS NATIVOS)
+function renderDashboard() {
+  const dash = document.getElementById('tab-dashboard');
+  if(!dash) return;
+
+  let totalMonto = 0;
+  let activos = 0;
+  let cerradosGanados = 0;
+
+  LEADS.forEach(l => {
+    totalMonto += (l.monto || 0);
+    if (l.estado === 'Cerrado Ganado') cerradosGanados++;
+    if (l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado') activos++;
+  });
+
+  // Agrupamiento Comercial
+  const porEtapa = {};
+  PIPELINE_ETAPAS.forEach(e => porEtapa[e] = 0);
+  LEADS.forEach(l => { if(porEtapa[l.estado] !== undefined) porEtapa[l.estado] += (l.monto || 0); });
+
+  const porFuente = {};
+  FUENTES.forEach(f => porFuente[f] = 0);
+  LEADS.forEach(l => { if(porFuente[l.fuente] !== undefined) porFuente[l.fuente]++; });
+
+  let maxEtapa = Math.max(...Object.values(porEtapa), 1);
+  let maxFuente = Math.max(...Object.values(porFuente), 1);
+
+  dash.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">Pipeline Total Estimado</div>
+        <div class="kpi-val blue">$${totalMonto.toLocaleString('es-MX', {minimumFractionDigits:2})}</div>
+        <div class="kpi-sub">Valor de toda la base comercial</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Prospectos Activos</div>
+        <div class="kpi-val amber">${activos}</div>
+        <div class="kpi-sub">En proceso de negociación</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Cierres Exitosos</div>
+        <div class="kpi-val green">${cerradosGanados}</div>
+        <div class="kpi-sub">Leads Ganados acumulados</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title"><i class="ti ti-chart-pie"></i> Distribución por Etapa (Monto $)</div>
+        <div class="bar-chart">
+          ${Object.entries(porEtapa).map(([etapa, monto]) => {
+            const pct = (monto / maxEtapa) * 100;
+            return `
+              <div class="bar-row">
+                <div class="bar-label" title="${etapa}">${etapa}</div>
+                <div class="bar-track"><div class="bar-fill" style="width: ${pct}%; background:#185fa5;"></div></div>
+                <div class="bar-count">$${monto.toLocaleString('es-MX')}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title"><i class="ti ti-filter"></i> Origen de Prospectos (Cantidad)</div>
+        <div class="bar-chart">
+          ${Object.entries(porFuente).map(([fuente, cant]) => {
+            const pct = (cant / maxFuente) * 100;
+            return `
+              <div class="bar-row">
+                <div class="bar-label" title="${fuente}">${fuente}</div>
+                <div class="bar-track"><div class="bar-fill" style="width: ${pct}%; background:var(--green);"></div></div>
+                <div class="bar-count">${cant} u.</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
-// ─── LOGIN DE SEGURIDAD EXCLUSIVO ──────────────────────────────────────────────
-function handleLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
+// 2. RENDEREADO DE LA BASE DE LEADS (TABLA ORIGINAL)
+function renderLeadsTable() {
+  const container = document.getElementById('tab-leads');
+  if(!container) return;
 
-  let loginValido = false;
+  container.innerHTML = `
+    <div class="filters">
+      <input type="text" id="search-input" placeholder="Buscar por nombre, empresa o teléfono..." oninput="filtrarLeads()">
+      <select id="filter-etapa" onchange="filtrarLeads()">
+        <option value="">Todas las etapas</option>
+        ${PIPELINE_ETAPAS.map(e => `<option value="${e}">${e}</option>`).join('')}
+      </select>
+      <select id="filter-fuente" onchange="filtrarLeads()">
+        <option value="">Todas las fuentes</option>
+        ${FUENTES.map(f => `<option value="${f}">${f}</option>`).join('')}
+      </select>
+      <span class="count-label" id="leads-count">Mostrando: ${LEADS.length} leads</span>
+    </div>
 
-  if (user === AUTH_USER && pass === AUTH_PASS) {
-    loginValido = true;
-  } else {
-    const encontrarUsuario = ADMINS.find(u => u.user === user && u.pass === pass);
-    if (encontrarUsuario) loginValido = true;
-  }
-
-  if (loginValido) {
-    sessionStorage.setItem('crm_logged_in', 'true');
-    const container = document.getElementById('login-container');
-    if (container) container.style.display = 'none';
-    if (errEl) errEl.style.display = 'none';
-    showNotification("Acceso autorizado. Sincronizando pipeline...");
-  } else {
-    if (errEl) errEl.style.display = 'block';
-  }
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Prospecto</th>
+            <th>Contacto</th>
+            <th>Producto e Importe</th>
+            <th>Origen Canal</th>
+            <th>Asignación</th>
+            <th>Estado Pipeline</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  `;
+  filtrarLeads();
 }
 
-// ─── RECORDATORIO DE SEGUIMIENTOS DEL DÍA ──────────────────────────────────────
+function filtrarLeads() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const fEtapa = document.getElementById('filter-etapa').value;
+  const fFuente = document.getElementById('filter-fuente').value;
+
+  const filtrados = LEADS.filter(l => {
+    const matchQ = !q || (l.nombre || '').toLowerCase().includes(q) || (l.empresa || '').toLowerCase().includes(q) || (l.telefono || '').toLowerCase().includes(q);
+    const matchEtapa = !fEtapa || l.estado === fEtapa;
+    const matchFuente = !fFuente || l.fuente === fFuente;
+    return matchQ && matchEtapa && matchFuente;
+  });
+
+  document.getElementById('leads-count').innerText = `Mostrando: ${filtrados.length} leads`;
+
+  const tbody = document.getElementById('table-body');
+  if(!tbody) return;
+
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text3); padding:24px;">No se encontraron prospectos con los filtros activos.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(l => {
+    const badgeClass = 'b-' + (l.estado || 'nuevo').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '');
+    const waBoton = l.telefono ? `<a href="https://wa.me/${l.telefono.replace(/\D/g,'')}" target="_blank" class="wa-link" onclick="event.stopPropagation()"><i class="ti ti-brand-whatsapp"></i> ${l.telefono}</a>` : '<span style="color:var(--text3)">Sin Teléfono</span>';
+    
+    return `
+      <tr onclick="openEditLead('${l.id}')">
+        <td>
+          <div class="td-name">
+            <div class="avatar">${(l.nombre || 'P').charAt(0).toUpperCase()}</div>
+            <div>
+              <div>${l.nombre}</div>
+              <div class="td-muted">${l.empresa || 'Particular'}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div>${waBoton}</div>
+          <div class="td-muted">${l.correo || 'Sin correo registrado'}</div>
+        </td>
+        <td>
+          <div style="font-weight:500;">$${(l.monto || 0).toLocaleString('es-MX')}</div>
+          <div class="td-muted">${l.producto || 'No especificado'}</div>
+        </td>
+        <td>
+          <div><i class="ti ti-share" style="color:var(--text3)"></i> ${l.fuente || 'Directo'}</div>
+        </td>
+        <td>
+          <div>${l.ejecutivo || 'Sin Asignar'}</div>
+          <div class="td-muted">${l.responsable || '-'}</div>
+        </td>
+        <td>
+          <span class="badge ${badgeClass}">${l.estado || 'Nuevo'}</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// 3. RENDEREADO DE LA PESTAÑA DE SEGUIMIENTOS AGENDADOS
+function renderSeguimientoTab() {
+  const container = document.getElementById('tab-seguimiento');
+  if(!container) return;
+
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+
+  const atrasados = [];
+  const futuros = [];
+
+  LEADS.forEach(l => {
+    if(!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return;
+    
+    const fSeg = new Date(l.proximoseg);
+    if(fSeg < hoy) atrasados.push({ lead: l, fecha: fSeg });
+    else futuros.push({ lead: l, fecha: fSeg });
+  });
+
+  // Ordenar cronológicamente
+  atrasados.sort((a,b) => a.fecha - b.fecha);
+  futuros.sort((a,b) => a.fecha - b.fecha);
+
+  function mapearFilasSeguimiento(lista) {
+    if(lista.length === 0) return `<tr><td colspan="5" style="text-align:center; color:var(--text3); padding:16px;">Sin compromisos en esta sección.</td></tr>`;
+    return lista.map(item => {
+      const l = item.lead;
+      return `
+        <tr onclick="openEditLead('${l.id}')">
+          <td class="td-name">${l.nombre} <span class="td-muted" style="font-weight:normal; margin-left:6px;">(${l.empresa || 'Particular'})</span></td>
+          <td>${l.producto}</td>
+          <td>${l.ejecutivo}</td>
+          <td style="font-weight:500;">${new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'})}</td>
+          <td class="td-muted" style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${l.notas || ''}">${l.notas || 'Sin anotaciones previas'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  container.innerHTML = `
+    <div class="seg-group">
+      <div class="seg-title atrasado"><i class="ti ti-alert-triangle"></i> SEGUIMIENTOS VENCIDOS / ATRASADOS</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Prospecto</th><th>Producto</th><th>Ejecutivo Asignado</th><th>Fecha Programada</th><th>Últimas Notas</th></tr>
+          </thead>
+          <tbody>${mapearFilasSeguimiento(atrasados)}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="seg-group">
+      <div class="seg-title futuro"><i class="ti ti-calendar-check"></i> ACCIONES PROGRAMADAS (HOY Y FUTURAS)</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Prospecto</th><th>Producto</th><th>Ejecutivo Asignado</th><th>Fecha Programada</th><th>Últimas Notas</th></tr>
+          </thead>
+          <tbody>${mapearFilasSeguimiento(futuros)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// 4. RENDEREADO DE LA PESTAÑA DE CONFIGURACIÓN DINÁMICA
+function renderConfigTab() {
+  const container = document.getElementById('tab-config');
+  if(!container) return;
+
+  container.innerHTML = `
+    <div class="config-container">
+      <div class="config-box">
+        <h3><i class="ti ti-tournament"></i> Etapas del Pipeline de Ventas</h3>
+        <div class="config-tags-wrapper">${PIPELINE_ETAPAS.map((e, idx) => `<div class="config-tag">${e} <i class="ti ti-x" onclick="eliminarElementoConfig('pipeline_etapas', '${e}')"></i></div>`).join('')}</div>
+        <div class="config-input-group">
+          <input type="text" id="add-etapa" placeholder="Ej. Demo Pendiente">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('pipeline_etapas', 'add-etapa')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-package"></i> Catálogo de Productos / Servicios</h3>
+        <div class="config-tags-wrapper">${PRODUCTOS.map(p => `<div class="config-tag">${p} <i class="ti ti-x" onclick="eliminarElementoConfig('productos', '${p}')"></i></div>`).join('')}</div>
+        <div class="config-input-group">
+          <input type="text" id="add-producto" placeholder="Nombre del nuevo producto">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('productos', 'add-producto')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-share"></i> Orígenes / Canales de Entrada</h3>
+        <div class="config-tags-wrapper">${FUENTES.map(f => `<div class="config-tag">${f} <i class="ti ti-x" onclick="eliminarElementoConfig('fuentes', '${f}')"></i></div>`).join('')}</div>
+        <div class="config-input-group">
+          <input type="text" id="add-fuente" placeholder="Ej. Facebook Reels">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('fuentes', 'add-fuente')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-coin"></i> Rangos de Presupuesto Comercial</h3>
+        <div class="config-tags-wrapper">${PRESUPUESTOS.map(b => `<div class="config-tag">${b} <i class="ti ti-x" onclick="eliminarElementoConfig('presupuestos', '${b}')"></i></div>`).join('')}</div>
+        <div class="config-input-group">
+          <input type="text" id="add-presupuesto" placeholder="Ej. $10,000 - $20,000">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('presupuestos', 'add-presupuesto')">Añadir</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── ACCIONES DE ACTUALIZACIÓN EN CONFIGURACIÓN (CON SUPABASE) ──────────────────
+async function agregarElementoConfig(tipo, inputId) {
+  const input = document.getElementById(inputId);
+  const valor = input.value.trim();
+  if(!valor) return;
+
+  const { error } = await _supabase.from('crm_config').insert([{ tipo, valor }]);
+  if(error) alert("Error al guardar configuración: " + error.message);
+
+  input.value = '';
+  await cargarDatosDesdeSupabase();
+  renderConfigTab();
+}
+
+async function eliminarElementoConfig(tipo, valor) {
+  if(!confirm(`¿Deseas remover "${valor}" de las opciones de configuración?`)) return;
+
+  const { error } = await _supabase.from('crm_config').delete().eq('tipo', tipo).eq('valor', valor);
+  if(error) alert("Error al eliminar configuración: " + error.message);
+
+  await cargarDatosDesdeSupabase();
+  renderConfigTab();
+}
+
 function verificarSeguimientosHoy(leads) {
   const hoyStr = new Date().toLocaleDateString('es-MX');
-  
   const hoyLeads = leads ? leads.filter(l => {
     if (!l.proximoseg) return false;
     const f = new Date(l.proximoseg);
@@ -801,31 +546,14 @@ function verificarSeguimientosHoy(leads) {
   }
 }
 
-// ─── FUNCIÓN PARA MOSTRAR / OCULTAR EL PANEL LATERAL (FALTANTE) ────────────────
-function togglePanel(show) {
-  const overlay = document.getElementById('overlay');
-  const panel = document.getElementById('panel');
-  if (overlay && panel) {
-    if (show) {
-      overlay.classList.add('active');
-      panel.classList.add('active');
-    } else {
-      overlay.classList.remove('active');
-      panel.classList.remove('active');
-    }
-  }
-}
-
-function closePanel(e) {
-  if (!e || e.target.id === 'overlay') togglePanel(false);
-}
-
-// ─── INICIALIZADOR DEL CRM ────────────────────────────────────────────────────
+// ─── INICIALIZADOR EXCLUSIVO DEL CRM ──────────────────────────────────────────
 window.onload = async function() {
   await cargarDatosDesdeSupabase();
 
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
-    const container = document.getElementById('login-container');
-    if (container) container.style.display = 'none';
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    renderDashboard();
+    verificarSeguimientosHoy(LEADS);
   }
-}
+};

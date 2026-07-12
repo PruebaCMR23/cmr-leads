@@ -9,10 +9,16 @@ let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
 let PRESUPUESTOS = [];
-let RESPONSABLES = [];
-let EJECUTIVOS = [];
+let ESTADOS_PIPELINE = [];
+
+// ELEMENTOS FIJOS SOLICITADOS
+const RESPONSABLES = [
+  'Pilar Gonzalez - marketing digital',
+  'Ana Maria Alonso - Ventas Online',
+  'Yessica Carrillo - Gerencia de Ventas (Ventas Mayoreo)',
+  'Emmanuel Zúñiga - Gerencia General'
+];
 const PRIORIDADES = ['Alta', 'Media', 'Baja'];
-const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
 
 let LEADS = [];
 let currentLeadId = null;
@@ -53,11 +59,9 @@ async function cargarConfiguracionesBase() {
   const prData = await supabaseRequest('config_presupuestos?select=*');
   PRESUPUESTOS = prData ? prData.map(x => x.nombre) : [];
 
-  const rData = await supabaseRequest('config_responsables?select=*');
-  RESPONSABLES = rData ? rData.map(x => x.nombre) : [];
-
-  const eData = await supabaseRequest('config_ejecutives?select=*');
-  EJECUTIVOS = eData ? eData.map(x => x.nombre) : [];
+  // Reutiliza la tabla de responsorios previa para guardar los estados del Pipeline de forma dinámica
+  const estData = await supabaseRequest('config_responsables?select=*');
+  ESTADOS_PIPELINE = estData ? estData.map(x => x.nombre) : [];
 
   const aData = await supabaseRequest('config_admins?select=*');
   ADMINS = aData || [];
@@ -103,7 +107,7 @@ function handleLogout() {
 // ─── PESTAÑA: TODOS LOS LEADS (FILTROS Y TABLA COMPLETA) ──────────────────────
 function actualizarSelectsFiltrosTodosLeads() {
   inyectarOpcionesFiltro('f-fuente', FUENTES, 'Todas las fuentes');
-  inyectarOpcionesFiltro('f-estado', ESTADOS, 'Todos los estados');
+  inyectarOpcionesFiltro('f-estado', ESTADOS_PIPELINE, 'Todos los estados');
   inyectarOpcionesFiltro('f-responsable', RESPONSABLES, 'Todos los responsables');
   inyectarOpcionesFiltro('f-prioridad', PRIORIDADES, 'Todas las prioridades');
 }
@@ -130,7 +134,7 @@ function filtrarTodosLosLeads() {
       (l.telefono && l.telefono.includes(search));
     const cumpleFuente = !fuente || l.fuente === fuente;
     const cumpleEstado = !estado || l.estado === estado;
-    const cumpleResp = !resp || (l.responsable && l.responsable.includes(resp));
+    const cumpleResp = !resp || l.responsable === resp;
     const cumplePrio = !prio || l.prioridad === prio;
 
     return cumpleSearch && cumpleFuente && cumpleEstado && cumpleResp && cumplePrio;
@@ -161,7 +165,7 @@ function renderTodosLosLeads(arreglo) {
         <td>${l.fuente || '—'}</td>
         <td>${l.producto || '—'}</td>
         <td>${l.responsable ? l.responsable.split(' - ')[0] : '—'}</td>
-        <td><span class="tab" style="padding:2px 8px; font-size:11px; display:inline; background:var(--bg2);">${l.estado}</span></td>
+        <td><span class="tab" style="padding:2px 8px; font-size:11px; display:inline; background:var(--bg2);">${l.estado || 'Nuevo'}</span></td>
         <td>${l.prioridad || 'Media'}</td>
         <td>${fStr}</td>
         <td><strong>${l.presupuesto || '$0'}</strong></td>
@@ -224,7 +228,7 @@ function inyectarFilasSeguimiento(tbody, arreglo) {
         <td><strong>#${l.id}</strong></td>
         <td>${l.nombre}</td>
         <td>${l.fuente}</td>
-        <td>${l.estado}</td>
+        <td>${l.estado || 'Nuevo'}</td>
         <td>${l.responsable ? l.responsable.split(' - ')[0] : ''}</td>
         <td><i class="ti ti-alarm" style="color:#f59e0b;"></i> ${fStr}</td>
       </tr>
@@ -233,7 +237,7 @@ function inyectarFilasSeguimiento(tbody, arreglo) {
   tbody.innerHTML = html;
 }
 
-// ─── PESTAÑA: REPORTES (MÉTRICAS HORIZONTALES Y 3 GRÁFICOS COMPLETOS) ─────────
+// ─── PESTAÑA: REPORTES ────────────────────────────────────────────────────────
 function renderReportesPestana() {
   const hoy = new Date();
   const esteMes = hoy.getMonth();
@@ -257,7 +261,7 @@ function renderReportesPestana() {
   document.getElementById('r-promedio').textContent = `$${promedio.toLocaleString('es-MX')}`;
   document.getElementById('r-total').textContent = `$${totalVendido.toLocaleString('es-MX')}`;
 
-  // Agrupar leads por mes
+  // Agrupar por mes
   const mesesNombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const conteoMeses = {};
   LEADS.forEach(l => {
@@ -268,7 +272,7 @@ function renderReportesPestana() {
   });
   construirBarrasGrafica('chart-rep-mes', Object.entries(conteoMeses));
 
-  // Ventas por Canal (Cerrados Ganados agrupados por fuente)
+  // Ventas por Canal
   const conteoCanal = {};
   ganados.forEach(g => {
     conteoCanal[g.fuente || 'Por definir'] = (conteoCanal[g.fuente || 'Por definir'] || 0) + 1;
@@ -289,17 +293,25 @@ function renderConfiguracionPanel() {
   inyectarTagsConfig('cfg-wrap-fuente', FUENTES, 'config_fuentes');
   inyectarTagsConfig('cfg-wrap-producto', PRODUCTOS, 'config_productos');
   inyectarTagsConfig('cfg-wrap-presupuesto', PRESUPUESTOS, 'config_presupuestos');
-  inyectarTagsConfig('cfg-wrap-responsable', RESPONSABLES, 'config_responsables');
-  inyectarTagsConfig('cfg-wrap-ejecutivo', EJECUTIVOS, 'config_ejecutives');
+  inyectarTagsConfig('cfg-wrap-estado', ESTADOS_PIPELINE, 'config_responsables');
 
   const tbody = document.getElementById('cfg-table-admins');
   if (!tbody) return;
-  let html = '';
+
+  // Inyectamos el Principal primero
+  let html = `
+    <tr style="background: rgba(29, 158, 117, 0.05);">
+      <td><strong>${AUTH_USER} (Principal)</strong></td>
+      <td><span style="color:var(--green); font-weight:600;">Dueño del Sistema</span></td>
+      <td>—</td>
+    </tr>
+  `;
+  // Luego inyectamos los demás administradores secundarios
   ADMINS.forEach(a => {
     html += `
       <tr>
         <td>${a.user}</td>
-        <td>••••••••</td>
+        <td>•••••••• / Administrador</td>
         <td><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="eliminarAdminUser(${a.id})"><i class="ti ti-trash"></i></button></td>
       </tr>
     `;
@@ -328,7 +340,6 @@ async function agregarConfigTag(tipo) {
   if (!valor) return;
 
   let tabla = `config_${tipo}s`;
-  if (tipo === 'ejecutivo') tabla = 'config_ejecutives';
 
   const res = await supabaseRequest(tabla, 'POST', { nombre: valor });
   if (res) {
@@ -371,7 +382,7 @@ async function agregarAdminUser() {
 
 async function eliminarAdminUser(id) {
   if (!confirm("¿Eliminar este usuario administrador?")) return;
-  const res = await supabaseRequest(`config_admins?id=eq.${id}`, 'DELETE');
+  const res = await supabaseRequest('config_admins?id=eq.' + id, 'DELETE');
   if (res) {
     notify("🗑 Cuenta eliminada.");
     await cargarConfiguracionesBase();
@@ -479,7 +490,7 @@ function renderTablaSeguimientoActivos() {
       <tr style="cursor:pointer;" onclick="togglePanel(true, ${l.id})">
         <td><strong>#${l.id}</strong></td>
         <td>${l.nombre}</td>
-        <td><span class="tab" style="padding:2px 8px; font-size:11px; display:inline; background:var(--bg2);">${l.estado}</span></td>
+        <td><span class="tab" style="padding:2px 8px; font-size:11px; display:inline; background:var(--bg2);">${l.estado || 'Nuevo'}</span></td>
         <td>${l.responsable ? l.responsable.split(' - ')[0] : ''}</td>
         <td><i class="ti ti-alarm" style="color:#f59e0b;"></i> ${fStr}</td>
         <td><strong>${l.presupuesto || '$0'}</strong></td>
@@ -523,9 +534,9 @@ function llenarSelectsFormulario() {
   inyectarOpciones('n-fuente', FUENTES, 'Seleccionar fuente...');
   inyectarOpciones('n-producto', PRODUCTOS, 'Seleccionar producto...');
   inyectarOpciones('n-presupuesto', PRESUPUESTOS, 'Seleccionar monto...');
-  inyectarOpciones('n-responsable', EJECUTIVOS, 'Seleccionar responsable...');
+  inyectarOpciones('n-responsable', RESPONSABLES, 'Seleccionar responsable...');
   inyectarOpciones('n-prioridad', PRIORIDADES);
-  inyectarOpciones('n-situacion', ESTADOS);
+  inyectarOpciones('n-situacion', ESTADOS_PIPELINE, 'Seleccionar Pipeline...');
 }
 
 function inyectarOpciones(elementId, arrayData, placeholder = null) {
@@ -559,7 +570,7 @@ function cargarLeadEnCampos(id) {
   document.getElementById('n-presupuesto').value = lead.presupuesto || '';
   document.getElementById('n-responsable').value = lead.responsable || '';
   document.getElementById('n-prioridad').value = lead.prioridad || 'Media';
-  document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
+  document.getElementById('n-situacion').value = lead.estado || '';
   document.getElementById('n-seg').value = lead.proximoseg ? lead.proximoseg.substring(0, 16) : '';
   document.getElementById('n-notas').value = lead.notas || '';
 }
@@ -645,7 +656,7 @@ function exportCSV() {
   if (LEADS.length === 0) return;
   let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\n";
   LEADS.forEach(l => {
-    csv += `"${l.id}","${l.nombre}","${l.empresa || ''}","${l.telefono || ''}","${l.correo || ''}","${l.ciudad || ''}","${l.estado_rep || ''}","${l.fuente}","${l.producto}","${l.presupuesto}","${l.responsable}","${l.prioridad}","${l.estado}","${l.proximoseg || ''}"\n`;
+    csv += `"${l.id}","${l.nombre}","${l.empresa || ''}","${l.telefono || ''}","${l.correo || ''}","${l.ciudad || ''}","${l.estado_rep || ''}","${l.fuente}","${l.producto}","${l.presupuesto}","${l.responsable}","${l.prioridad}","${l.estado || 'Nuevo'}","${l.proximoseg || ''}"\n`;
   });
   const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement("a");
@@ -662,7 +673,6 @@ async function inicializarSistema() {
 }
 
 window.onload = function() {
-  // Carga previa de administradores de seguridad obligatorios
   supabaseRequest('config_admins?select=*').then(data => {
     ADMINS = data || [];
     if (sessionStorage.getItem('crm_logged_in') === 'true') {

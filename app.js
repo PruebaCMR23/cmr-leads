@@ -3,10 +3,10 @@ const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
 // CREDENCIALES EXCLUSIVAS ACTUALIZADAS
-const AUTH_USER = "a";
-const AUTH_PASS = "s"; 
+const AUTH_USER = "Herbolaria";
+const AUTH_PASS = "Saludable*"; 
 
-// Arreglos globales dinámicos que se sincronizan con Supabase
+// Arreglos globales dinámicos vinculados
 let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
@@ -18,558 +18,420 @@ let EJECUTIVOS = [
   "Yessica Carrillo - Gerencia de Ventas (Ventas Mayoreo)",
   "Emmanuel Zúñiga - Gerencia General"
 ];
-let PIPELINE_ETAPAS = [];
-let LEADS_GLOBAL = [];
+const PRIORIDADES = ['Alta', 'Media', 'Baja'];
+const ESTADOS = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
 
-// Instancia global de Supabase Client
-const { createClient } = supabase;
-const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+let LEADS = [];
+let currentLeadId = null;
 
-// ─── FUNCIÓN DE CAMBIO DE PESTAÑAS (TABS) ──────────────────────────────────────
-function cambiarTab(tabName) {
-  const tabs = ['dashboard', 'leads', 'seguimiento', 'config'];
-  tabs.forEach(t => {
-    const elTab = document.getElementById(`tab-${t}`);
-    const elBtn = document.getElementById(`t-${t}`);
-    if (elTab) elTab.style.display = (t === tabName) ? 'block' : 'none';
-    if (elBtn) {
-      if (t === tabName) elBtn.classList.add('active');
-      else elBtn.classList.remove('active');
-    }
-  });
+// Colores variados para las gráficas de barra horizontales del dashboard
+const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6'];
 
-  if (tabName === 'dashboard') {
-    renderDashboardKPIs(LEADS_GLOBAL);
-    renderDashboardCharts(LEADS_GLOBAL);
-    renderDashboardSeguimientos(LEADS_GLOBAL);
-  }
-  if (tabName === 'leads') filtrarLeads();
-  if (tabName === 'seguimiento') filtrarSeguimientosPorTiempo();
-}
+// ─── PETICIONES SUPABASE API ──────────────────────────────────────────────────
+async function supabaseRequest(endpoint, method = 'GET', body = null) {
+  const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+  const headers = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": method === 'POST' ? "return=representation" : ""
+  };
+  
+  const config = { method, headers };
+  if (body) config.body = JSON.stringify(body);
 
-// ─── MANEJO DE CONFIGURACIONES DESDE SUPABASE ──────────────────────────────────
-async function cargarDatosDesdeSupabase() {
   try {
-    const { data: configData, error: configError } = await _supabase
-      .from('configuracion')
-      .select('*')
-      .eq('id', 1)
-      .single();
-
-    if (!configError && configData) {
-      document.getElementById('app-title').innerText = configData.nombre_app || 'CRM Leads';
-      document.getElementById('cfg-nombre-app').value = configData.nombre_app || '';
-      document.getElementById('cfg-moneda').value = configData.moneda || 'MXN';
-
-      ADMINS = configData.admins || [];
-      FUENTES = configData.fuentes || [];
-      PRODUCTOS = configData.productos || [];
-      PRESUPUESTOS = configData.presupuestos || [];
-      if (configData.responsables && configData.responsables.length > 0) RESPONSABLES = configData.responsables;
-      if (configData.ejecutives && configData.ejecutives.length > 0) EJECUTIVOS = configData.ejecutives;
-      PIPELINE_ETAPAS = configData.pipeline_etapas || [];
-    }
-
-    const { data: leadsData, error: leadsError } = await _supabase
-      .from('leads')
-      .select('*')
-      .order('fechacreacion', { ascending: false });
-
-    if (!leadsError && leadsData) {
-      LEADS_GLOBAL = leadsData;
-    }
-
-    actualizarSelectsFormulario();
-    actualizarSelectsFiltros();
-    llenarConfiguracionVisual();
-
-    renderDashboardKPIs(LEADS_GLOBAL);
-    renderDashboardCharts(LEADS_GLOBAL);
-    renderDashboardSeguimientos(LEADS_GLOBAL);
-    renderTableLeads(LEADS_GLOBAL);
-    filtrarSeguimientosPorTiempo();
-
-    verificarSeguimientosHoy(LEADS_GLOBAL);
-
+    const res = await fetch(url, config);
+    if (!res.ok) throw new Error(`Error en API HTTP: ${res.status}`);
+    return res.status === 204 ? true : await res.json();
   } catch (err) {
-    console.error("Error en sincronización inicial:", err);
+    console.error(`❌ Error Supabase en [${endpoint}]:`, err);
+    return null;
   }
 }
 
-// ─── LLENADO DINÁMICO DE SELECTORES (FORMULARIO) ──────────────────────────────
-function actualizarSelectsFormulario() {
-  llenarSelect('n-fuente', FUENTES, 'Seleccionar fuente…');
-  llenarSelect('n-producto', PRODUCTOS, 'Seleccionar producto…');
-  llenarSelect('n-presupuesto', PRESUPUESTOS, 'Seleccionar…');
-  llenarSelect('n-responsable', RESPONSABLES, 'Seleccionar…');
-  llenarSelect('n-ejecutivo', EJECUTIVOS, 'Seleccionar…');
-  llenarSelect('n-situacion', PIPELINE_ETAPAS, 'Selecciona etapa...');
-}
-
-function llenarSelect(elementId, arrayData, placeholder) {
-  const sel = document.getElementById(elementId);
-  if (!sel) return;
-  let html = `<option value="">${placeholder}</option>`;
-  arrayData.forEach(item => {
-    html += `<option value="${item}">${item}</option>`;
-  });
-  sel.innerHTML = html;
-}
-
-function actualizarSelectsFiltros() {
-  llenarSelectFiltro('filter-etapa', PIPELINE_ETAPAS, 'Todas las etapas');
-  llenarSelectFiltro('filter-fuente', FUENTES, 'Todas las fuentes');
-  llenarSelectFiltro('filter-ejecutivo', EJECUTIVOS, 'Todos los ejecutivos');
-}
-
-function llenarSelectFiltro(elementId, arrayData, placeholder) {
-  const sel = document.getElementById(elementId);
-  if (!sel) return;
-  let html = `<option value="">${placeholder}</option>`;
-  arrayData.forEach(item => {
-    html += `<option value="${item}">${item}</option>`;
-  });
-  sel.innerHTML = html;
-}
-
-// ─── MÓDULO VISUAL DE CONFIGURACIÓN DE PARÁMETROS ──────────────────────────────
-function llenarConfiguracionVisual() {
-  renderTagsConfig('box-etapas', PIPELINE_ETAPAS, 'pipeline_etapas');
-  renderTagsConfig('box-productos', PRODUCTOS, 'productos');
-  renderTagsConfig('box-fuentes', FUENTES, 'fuentes');
-  renderTagsConfig('box-ejecutivos', EJECUTIVOS, 'ejecutives');
-}
-
-function renderTagsConfig(containerId, arrayData, campoSql) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  let html = '';
-  arrayData.forEach((item, index) => {
-    html += `
-      <div class="config-tag">
-        <span>${item}</span>
-        <i class="ti ti-x" style="cursor:pointer;" onclick="eliminarElementoConfig('${campoSql}', ${index})"></i>
-      </div>
-    `;
-  });
-  container.innerHTML = html || '<span style="font-size:12px; color:var(--text3);">Lista vacía.</span>';
-}
-
-async function guardarConfigGeneral() {
-  const nombre = document.getElementById('cfg-nombre-app').value.trim();
-  const moneda = document.getElementById('cfg-moneda').value;
-  if (!nombre) return alert("El nombre de la aplicación no puede estar vacío.");
-  try {
-    const { error } = await _supabase.from('configuracion').update({ nombre_app: nombre, moneda: moneda }).eq('id', 1);
-    if (error) throw error;
-    showNotification("Configuración general guardada con éxito.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) { alert("Error: " + err.message); }
-}
-
-async function agregarElementoConfig(campoSql, inputId) {
-  const inp = document.getElementById(inputId);
-  if (!inp) return;
-  const valor = inp.value.trim();
-  if (!valor) return alert("Ingresa un valor válido.");
-  let arrayActual = campoSql === 'pipeline_etapas' ? [...PIPELINE_ETAPAS] : campoSql === 'productos' ? [...PRODUCTOS] : campoSql === 'fuentes' ? [...FUENTES] : [...EJECUTIVOS];
-  if (arrayActual.includes(valor)) return alert("Ese elemento ya existe.");
-  arrayActual.push(valor);
-  try {
-    const payload = {}; payload[campoSql] = arrayActual;
-    const { error } = await _supabase.from('configuracion').update(payload).eq('id', 1);
-    if (error) throw error;
-    inp.value = '';
-    showNotification("Elemento añadido correctamente.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) { alert("Error: " + err.message); }
-}
-
-async function eliminarElementoConfig(campoSql, index) {
-  if (!confirm("¿Deseas remover este parámetro?")) return;
-  let arrayActual = campoSql === 'pipeline_etapas' ? [...PIPELINE_ETAPAS] : campoSql === 'productos' ? [...PRODUCTOS] : campoSql === 'fuentes' ? [...FUENTES] : [...EJECUTIVOS];
-  arrayActual.splice(index, 1);
-  try {
-    const payload = {}; payload[campoSql] = arrayActual;
-    const { error } = await _supabase.from('configuracion').update(payload).eq('id', 1);
-    if (error) throw error;
-    showNotification("Elemento removido.");
-    await cargarDatosDesdeSupabase();
-  } catch (err) { alert("Error: " + err.message); }
-}
-
-// ─── RENDIMIENTO Y CÁLCULOS RESTAURADOS DEL DASHBOARD (MÉTRICAS INDEPENDIENTES) ───
-function renderDashboardKPIs(leads) {
-  const ahora = new Date();
-  let totalLeads = leads.length;
-  let cerradosGanados = 0;
-  let montoCerrado = 0;
-  let pipelinePotencial = 0;
-  let segVencidos = 0;
-  let abandonados = 0;
-  let cerradosPerdidos = 0;
-
-  leads.forEach(l => {
-    const monto = parseFloat(l.monto) || 0;
-    const est = (l.estado || '').toLowerCase();
-
-    if (est === 'cerrado ganado') {
-      cerradosGanados++;
-      montoCerrado += monto;
-    } else if (est === 'abandonado') {
-      abandonados++;
-    } else if (est === 'cerrado perdido') {
-      cerradosPerdidos++;
-    } else {
-      pipelinePotencial += monto;
-    }
-
-    if (l.proximoseg && est !== 'cerrado ganado' && est !== 'cerrado perdido' && est !== 'abandonado') {
-      if (new Date(l.proximoseg) < ahora) {
-        segVencidos++;
-      }
-    }
-  });
-
-  const tasaConversion = totalLeads > 0 ? ((cerradosGanados / totalLeads) * 100).toFixed(1) : 0;
-
-  document.getElementById('kpi-total-leads').innerText = totalLeads;
-  document.getElementById('kpi-cerrados-ganados').innerText = cerradosGanados;
-  document.getElementById('kpi-tasa-conversion').innerText = `${tasaConversion}%`;
-  document.getElementById('kpi-progress-bar').style.width = `${tasaConversion}%`;
-  document.getElementById('kpi-monto-cerrado').innerText = `$${montoCerrado.toLocaleString('es-MX')}`;
-  document.getElementById('kpi-pipeline-potencial').innerText = `$${pipelinePotencial.toLocaleString('es-MX')}`;
-  document.getElementById('kpi-seg-vencidos').innerText = segVencidos;
-  document.getElementById('kpi-abandonados').innerText = abandonados;
-  document.getElementById('kpi-cerrados-perdidos').innerText = cerradosPerdidos;
-}
-
-// ─── GRÁFICOS RESTAURADOS TOTALMENTE POR BLOQUE INDEPENDIENTE ─────────────────────
-function renderDashboardCharts(leads) {
-  // 1. Leads por Fuente
-  const chartFuentes = document.getElementById('chart-fuentes');
-  if (chartFuentes) {
-    const conteo = {}; FUENTES.forEach(f => conteo[f] = 0);
-    leads.forEach(l => { if (conteo[l.fuente] !== undefined) conteo[l.fuente]++; });
-    chartFuentes.innerHTML = generarHTMLBarras(conteo, '#185fa5', false);
-  }
-
-  // 2. Estado del Pipeline
-  const chartEtapas = document.getElementById('chart-etapas');
-  if (chartEtapas) {
-    const conteo = {}; PIPELINE_ETAPAS.forEach(e => conteo[e] = 0);
-    leads.forEach(l => { if (conteo[l.estado] !== undefined) conteo[l.estado]++; });
-    chartEtapas.innerHTML = generarHTMLBarras(conteo, 'var(--green)', false);
-  }
-
-  // 3. Leads por Responsable
-  const chartResp = document.getElementById('chart-responsables');
-  if (chartResp) {
-    const conteo = {}; RESPONSABLES.forEach(r => conteo[r] = 0);
-    leads.forEach(l => { if (conteo[l.responsable] !== undefined) conteo[l.responsable]++; });
-    chartResp.innerHTML = generarHTMLBarras(conteo, '#ba7517', false);
-  }
-
-  // 4. Productos con más interés
-  const chartProd = document.getElementById('chart-productos');
-  if (chartProd) {
-    const conteo = {}; PRODUCTOS.forEach(p => conteo[p] = 0);
-    leads.forEach(l => { if (conteo[l.producto] !== undefined) conteo[l.producto]++; });
-    chartProd.innerHTML = generarHTMLBarras(conteo, '#534AB7', false);
-  }
-}
-
-function generarHTMLBarras(objetoDatos, color, esMoneda) {
-  let max = 0; html = '';
-  Object.values(objetoDatos).forEach(v => { if (v > max) max = v; });
-  Object.keys(objetoDatos).forEach(k => {
-    const val = objetoDatos[k];
-    const pct = max > 0 ? (val / max) * 100 : 0;
-    html += `
-      <div class="bar-row">
-        <div class="bar-label" title="${k}">${k}</div>
-        <div class="bar-track"><div class="bar-fill" style="width: ${pct}%; background: ${color};"></div></div>
-        <div class="bar-count">${esMoneda ? '$' + val.toLocaleString('es-MX') : val}</div>
-      </div>`;
-  });
-  return html || '<div class="empty">Sin datos acumulados</div>';
-}
-
-// ─── TABLA INFERIOR DE DASHBOARD: PRÓXIMOS SEGUIMIENTOS ACTIVOS ─────────────────
-function renderDashboardSeguimientos(leads) {
-  const tbody = document.getElementById('table-dashboard-seguimientos');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  const activos = leads.filter(l => l.proximoseg && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado')
-                       .sort((a,b) => new Date(a.proximoseg) - new Date(b.proximoseg));
-
-  if (activos.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">No hay próximos seguimientos activos programados.</td></tr>`;
-    return;
-  }
-
-  activos.slice(0, 10).forEach(l => {
-    const tr = document.createElement('tr');
-    tr.onclick = () => abrirPanelEditar(l);
-    const fStr = new Date(l.proximoseg).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'});
-    tr.innerHTML = `
-      <td><strong>#${l.id}</strong></td>
-      <td><div class="td-name">${l.nombre || 'Sin Nombre'}</div></td>
-      <td><span class="badge b-nuevo">${l.estado || 'Nuevo'}</span></td>
-      <td>${l.responsable || 'Sin Asignar'}</td>
-      <td><span style="font-weight:600; color:var(--green);">${fStr}</span></td>
-      <td><strong>$${(parseFloat(l.monto) || 0).toLocaleString('es-MX')}</strong></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-// ─── RENDERIZADO GENERAL Y FILTRADO DE LA TABLA DE BASE DE LEADS ─────────────────
-function renderTableLeads(leads) {
-  const tbody = document.getElementById('table-body');
-  if (!tbody) return; tbody.innerHTML = '';
-  if (leads.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">Ningún lead coincide con la búsqueda.</td></tr>`; return;
-  }
-  leads.forEach(l => {
-    const tr = document.createElement('tr'); tr.onclick = () => abrirPanelEditar(l);
-    const montoNum = parseFloat(l.monto) || 0;
-    let cleanPhone = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-    let waHtml = '—';
-    if (cleanPhone) {
-      if (cleanPhone.length === 10) cleanPhone = '52' + cleanPhone;
-      waHtml = `<a class="wa-link" href="https://wa.me/${cleanPhone}" target="_blank" onclick="event.stopPropagation();"><i class="ti ti-brand-whatsapp"></i> ${l.telefono}</a>`;
-    }
-    let fechaSegStr = l.proximoseg ? new Date(l.proximoseg).toLocaleDateString('es-MX') : '—';
-    tr.innerHTML = `
-      <td><div class="td-name"><div class="avatar">${(l.nombre||'?').charAt(0).toUpperCase()}</div><div><strong>${l.nombre||'—'}</strong><div class="td-muted">${l.empresa||'Particular'}</div></div></div></td>
-      <td><div>${waHtml}</div><div class="td-muted" style="font-size:11px;">${l.correo||'—'}</div></td>
-      <td><strong>$${montoNum.toLocaleString('es-MX')}</strong><div class="td-muted">${l.producto||'—'}</div></td>
-      <td><span style="font-size:12px;">${l.fuente||'—'}</span></td>
-      <td><div style="font-size:12px;">${l.ejecutivo||'—'}</div><div class="td-muted" style="font-size:10px;">${l.responsable||'—'}</div></td>
-      <td><span class="badge b-contactado">${l.estado||'Nuevo'}</span><span class="badge b-media" style="margin-left:4px; font-size:9px;">${l.prioridad||'Media'}</span></td>
-      <td style="font-size:12px; font-weight:500;">${fechaSegStr}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function filtrarLeads() {
-  const query = document.getElementById('search-input').value.toLowerCase();
-  const fEtapa = document.getElementById('filter-etapa').value;
-  const fFuente = document.getElementById('filter-fuente').value;
-  const fEjecutivo = document.getElementById('filter-ejecutivo').value;
-
-  const filtrados = LEADS_GLOBAL.filter(l => {
-    const matchQ = (l.nombre || '').toLowerCase().includes(query) || (l.empresa || '').toLowerCase().includes(query) || (l.telefono || '').includes(query);
-    return matchQ && (fEtapa === '' || l.estado === fEtapa) && (fFuente === '' || l.fuente === fFuente) && (fEjecutivo === '' || l.ejecutivo === fEjecutivo);
-  });
-  renderTableLeads(filtrados);
-  document.getElementById('leads-count').innerText = `Mostrando: ${filtrados.length} leads`;
-}
-
-// ─── REPORTE CRÍTICO COMPLETO: VENCIDO, PARA HOY, PROXIMOS 14 DÍAS ────────────────
-function filtrarSeguimientosPorTiempo() {
-  const tbody = document.getElementById('table-seg-dinamico');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  const filtro = document.getElementById('filter-reporte-tiempo').value;
-  const ahora = new Date();
+// Cargar catálogos dinámicos
+async function cargarConfiguracionesBase() {
+  const fData = await supabaseRequest('config_fuentes?select=*');
+  FUENTES = fData && fData.length > 0 ? fData.map(x => x.nombre) : ['Facebook Ads', 'Instagram Ads', 'WhatsApp', 'Página Web'];
   
-  // Clona fecha de hoy limpia de horas
-  const hoyInicio = new Date(); hoyInicio.setHours(0,0,0,0);
-  const hoyFin = new Date(); hoyFin.setHours(23,59,59,999);
-  
-  const limite14Dias = new Date(); limite14Dias.setDate(ahora.getDate() + 14); limite14Dias.setHours(23,59,59,999);
+  const pData = await supabaseRequest('config_productos?select=*');
+  PRODUCTOS = pData && pData.length > 0 ? pData.map(x => x.nombre) : ['Cápsulas Herbolarias', 'Tés Medicinales', 'Jarabe Inmune'];
 
-  const filtrados = LEADS_GLOBAL.filter(l => {
-    if (!l.proximoseg) return false;
-    const est = (l.estado || '').toLowerCase();
-    if (est === 'cerrado ganado' || est === 'cerrado perdido' || est === 'abandonado') return false;
-
-    const fSeg = new Date(l.proximoseg);
-
-    if (filtro === 'vencido') {
-      return fSeg < ahora;
-    } else if (filtro === 'hoy') {
-      return fSeg >= hoyInicio && fSeg <= hoyFin;
-    } else if (filtro === '14dias') {
-      return fSeg >= ahora && fSeg <= limite14Dias;
-    }
-    return true; // "todos"
-  });
-
-  if (filtrados.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Ningún seguimiento programado coincide con el filtro temporal.</td></tr>`;
-    return;
-  }
-
-  filtrados.forEach(l => {
-    const tr = document.createElement('tr'); tr.onclick = () => abrirPanelEditar(l);
-    let cleanPhone = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-    let waHtml = cleanPhone ? `<a class="wa-link" href="https://wa.me/52${cleanPhone.slice(-10)}" target="_blank" onclick="event.stopPropagation();"><i class="ti ti-brand-whatsapp"></i> ${l.telefono}</a>` : '—';
-    const fechaFormateada = new Date(l.proximoseg).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
-
-    tr.innerHTML = `
-      <td><strong>${l.nombre || '—'}</strong><div style="font-size:11px; color:var(--text2);">${l.empresa || 'Particular'}</div></td>
-      <td>${waHtml}</td>
-      <td>${l.producto || '—'}<div style="font-size:11px; color:var(--text3);">$${(parseFloat(l.monto)||0).toLocaleString('es-MX')}</div></td>
-      <td><span style="font-size:12px;">${l.ejecutivo || 'Sin ejecutivo'}</span></td>
-      <td><span style="font-weight:600; color: #a32d2d;">${fechaFormateada}</span></td>
-      <td><div style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px;">${l.notas || 'Sin anotaciones.'}</div></td>
-    `;
-    tbody.appendChild(tr);
-  });
+  const prData = await supabaseRequest('config_presupuestos?select=*');
+  PRESUPUESTOS = prData && prData.length > 0 ? prData.map(x => x.nombre) : ['< $5,000', '$5,000 - $15,000', '> $15,000'];
 }
 
-// ─── CONTROL INTACTO DE DESPLAZAMIENTO Y DESPLIEGUE DEL PANEL LATERAL ──────────────
-function togglePanel(show) {
+// Obtener registros de leads limpios de la nube
+async function fetchLeads() {
+  const data = await supabaseRequest('crm_leads?select=*&order=id.desc');
+  LEADS = data || [];
+  renderDashboard();
+  revisarSeguimientosHoy(LEADS);
+}
+
+// ─── CONTROL DEL LOGIN ACCESO ─────────────────────────────────────────────────
+function handleLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value.trim();
+  const errorDiv = document.getElementById('login-error');
+
+  if (user === AUTH_USER && pass === AUTH_PASS) {
+    sessionStorage.setItem('crm_logged_in', 'true');
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    inicializarSistema();
+  } else {
+    errorDiv.textContent = "⚠️ Usuario o contraseña inválidos.";
+    errorDiv.style.display = 'block';
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem('crm_logged_in');
+  window.location.reload();
+}
+
+// ─── CONTROL DE ANIMACIÓN PANEL LATERAL (OCULTO/VISIBLE DRAWER) ──────────────
+function togglePanel(show, leadId = null) {
   const overlay = document.getElementById('overlay');
   const panel = document.getElementById('panel');
-  if (overlay && panel) {
-    if (show) {
-      overlay.classList.add('active');
-      panel.classList.add('active');
+  
+  if (!overlay || !panel) return;
+
+  if (show) {
+    llenarSelectsFormulario();
+    if (leadId) {
+      currentLeadId = leadId;
+      document.getElementById('panel-title').innerHTML = `<i class="ti ti-edit"></i> Editar Lead #${leadId}`;
+      document.getElementById('btn-delete-lead').style.display = 'block';
+      cargarLeadEnCampos(leadId);
     } else {
-      overlay.classList.remove('active');
-      panel.classList.remove('active');
+      currentLeadId = null;
+      document.getElementById('panel-title').innerHTML = `<i class="ti ti-user-plus"></i> Nuevo Lead`;
+      document.getElementById('btn-delete-lead').style.display = 'none';
+      limpiarCamposFormulario();
     }
+    overlay.classList.add('active');
+    panel.classList.add('active');
+  } else {
+    overlay.classList.remove('active');
+    panel.classList.remove('active');
+    currentLeadId = null;
   }
 }
 
-function abrirPanelNuevo() {
-  document.getElementById('panel-title-text').innerText = "Nuevo Lead / Registro";
-  document.getElementById('n-id').value = '';
-  document.getElementById('n-nombre').value = '';
-  document.getElementById('n-empresa').value = '';
-  document.getElementById('n-telefono').value = '';
-  document.getElementById('n-correo').value = '';
-  document.getElementById('n-ciudad').value = '';
-  document.getElementById('n-estado-geo').value = '';
-  document.getElementById('n-fuente').value = '';
-  document.getElementById('n-producto').value = '';
-  document.getElementById('n-presupuesto').value = '';
-  document.getElementById('n-responsable').value = '';
-  document.getElementById('n-ejecutivo').value = '';
-  document.getElementById('n-prioridad').value = 'Media';
-  document.getElementById('n-situacion').value = PIPELINE_ETAPAS[0] || '';
-  document.getElementById('n-monto').value = 0;
-  document.getElementById('n-seg').value = '';
-  document.getElementById('n-notas').value = '';
-
-  document.getElementById('btn-delete-lead').style.display = 'none';
-  togglePanel(true);
+function closePanel(e) {
+  if (e && e.target.id === 'overlay') {
+    togglePanel(false);
+  }
 }
 
-function abrirPanelEditar(lead) {
-  document.getElementById('panel-title-text').innerText = "Expediente y Modificación de Lead";
-  document.getElementById('n-id').value = lead.id;
+// Llenar menús desplegables
+function llenarSelectsFormulario() {
+  inyectarOpciones('n-fuente', FUENTES, 'Seleccionar fuente...');
+  inyectarOpciones('n-producto', PRODUCTOS, 'Seleccionar producto...');
+  inyectarOpciones('n-presupuesto', PRESUPUESTOS, 'Seleccionar monto...');
+  inyectarOpciones('n-responsable', EJECUTIVOS, 'Seleccionar responsable...');
+  inyectarOpciones('n-prioridad', PRIORIDADES);
+  inyectarOpciones('n-situacion', ESTADOS);
+}
+
+function inyectarOpciones(elementId, arrayData, placeholder = null) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  let html = placeholder ? `<option value="" disabled selected>${placeholder}</option>` : '';
+  arrayData.forEach(v => {
+    html += `<option value="${v}">${v}</option>`;
+  });
+  el.innerHTML = html;
+}
+
+function limpiarCamposFormulario() {
+  ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-ciudad', 'n-estado', 'n-seg', 'n-notas'].forEach(id => {
+    const field = document.getElementById(id);
+    if (field) field.value = '';
+  });
+  ['n-fuente', 'n-producto', 'n-presupuesto', 'n-responsable', 'n-prioridad', 'n-situacion'].forEach(id => {
+    const field = document.getElementById(id);
+    if (field) field.selectedIndex = 0;
+  });
+}
+
+function cargarLeadEnCampos(id) {
+  const lead = LEADS.find(l => l.id == id);
+  if (!lead) return;
+
   document.getElementById('n-nombre').value = lead.nombre || '';
   document.getElementById('n-empresa').value = lead.empresa || '';
   document.getElementById('n-telefono').value = lead.telefono || '';
   document.getElementById('n-correo').value = lead.correo || '';
   document.getElementById('n-ciudad').value = lead.ciudad || '';
-  document.getElementById('n-estado-geo').value = lead.estado_geo || '';
+  document.getElementById('n-estado').value = lead.estado_rep || '';
   document.getElementById('n-fuente').value = lead.fuente || '';
   document.getElementById('n-producto').value = lead.producto || '';
   document.getElementById('n-presupuesto').value = lead.presupuesto || '';
   document.getElementById('n-responsable').value = lead.responsable || '';
-  document.getElementById('n-ejecutivo').value = lead.ejecutivo || '';
   document.getElementById('n-prioridad').value = lead.prioridad || 'Media';
-  document.getElementById('n-situacion').value = lead.estado || '';
-  document.getElementById('n-monto').value = lead.monto || 0;
+  document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
   
   if (lead.proximoseg) {
-    const d = new Date(lead.proximoseg);
-    const offset = d.getTimezoneOffset() * 60000;
-    document.getElementById('n-seg').value = (new Date(d.getTime() - offset)).toISOString().slice(0, 16);
+    document.getElementById('n-seg').value = lead.proximoseg.substring(0, 16);
   } else {
     document.getElementById('n-seg').value = '';
   }
   document.getElementById('n-notas').value = lead.notas || '';
-
-  document.getElementById('btn-delete-lead').style.display = 'inline-flex';
-  togglePanel(true);
 }
 
-// ACCIONES DE GUARDADO Y ELIMINACIÓN DIRECTA
-async function guardarLeadSupabase() {
-  const id = document.getElementById('n-id').value;
+// Guardar y procesar datos del formulario
+async function guardarLeadFormulario() {
   const nombre = document.getElementById('n-nombre').value.trim();
-  if (!nombre) return alert("El nombre del cliente es obligatorio.");
+  const fuente = document.getElementById('n-fuente').value;
+  const producto = document.getElementById('n-producto').value;
+  const responsable = document.getElementById('n-responsable').value;
 
-  const fSegValue = document.getElementById('n-seg').value;
-  let proximosegISO = fSegValue ? new Date(fSegValue).toISOString() : null;
+  if (!nombre || !fuente || !producto || !responsable) {
+    alert("⚠️ Por favor rellena los campos marcados como obligatorios (*)");
+    return;
+  }
 
   const payload = {
-    nombre: nombre,
+    nombre,
     empresa: document.getElementById('n-empresa').value.trim(),
     telefono: document.getElementById('n-telefono').value.trim(),
     correo: document.getElementById('n-correo').value.trim(),
     ciudad: document.getElementById('n-ciudad').value.trim(),
-    estado_geo: document.getElementById('n-estado-geo').value.trim(),
-    fuente: document.getElementById('n-fuente').value,
-    producto: document.getElementById('n-producto').value,
+    estado_rep: document.getElementById('n-estado').value.trim(),
+    fuente,
+    producto,
     presupuesto: document.getElementById('n-presupuesto').value,
-    responsable: document.getElementById('n-responsable').value,
-    ejecutivo: document.getElementById('n-ejecutivo').value,
-    prioridad: document.getElementById('n-prioridad').value,
-    estado: document.getElementById('n-situacion').value,
-    monto: parseFloat(document.getElementById('n-monto').value) || 0,
-    proximoseg: proximosegISO,
-    notas: document.getElementById('n-notas').value.trim(),
-    fechaactualizacion: new Date().toISOString()
+    responsable,
+    prioridad: document.getElementById('n-prioridad').value || 'Media',
+    estado: document.getElementById('n-situacion').value || 'Nuevo',
+    proximoseg: document.getElementById('n-seg').value ? new Date(document.getElementById('n-seg').value).toISOString() : null,
+    notas: document.getElementById('n-notas').value.trim()
   };
 
-  try {
-    if (id) {
-      await _supabase.from('leads').update(payload).eq('id', id);
-      showNotification("Expediente actualizado de forma transparente.");
-    } else {
-      await _supabase.from('leads').insert([payload]);
-      showNotification("Nuevo prospecto guardado con éxito.");
-    }
-    togglePanel(false);
-    await cargarDatosDesdeSupabase();
-  } catch (err) { alert("Error al guardar: " + err.message); }
+  if (currentLeadId) {
+    const res = await supabaseRequest(`crm_leads?id=eq.${currentLeadId}`, 'PATCH', payload);
+    if (res) notify("🔄 Prospecto actualizado correctamente.");
+  } else {
+    const res = await supabaseRequest('crm_leads', 'POST', payload);
+    if (res) notify("🚀 Nuevo lead registrado exitosamente.");
+  }
+
+  togglePanel(false);
+  fetchLeads();
 }
 
 async function eliminarLeadActual() {
-  const id = document.getElementById('n-id').value; if (!id) return;
-  if (!confirm("¿Deseas eliminar permanentemente este registro?")) return;
-  try {
-    await _supabase.from('leads').delete().eq('id', id);
-    showNotification("Registro borrado permanentemente.");
-    togglePanel(false); await cargarDatosDesdeSupabase();
-  } catch (err) { alert("Error: " + err.message); }
+  if (!currentLeadId) return;
+  if (!confirm("⚠️ ¿Estás completamente seguro de eliminar este Prospecto?")) return;
+
+  const res = await supabaseRequest(`crm_leads?id=eq.${currentLeadId}`, 'DELETE');
+  if (res) notify("🗑 Registro eliminado del CRM.");
+
+  togglePanel(false);
+  fetchLeads();
 }
 
-function showNotification(msg) {
-  const n = document.getElementById('notif'); if (!n) return;
-  n.innerText = msg; n.style.display = 'block';
-  setTimeout(() => { n.style.display = 'none'; }, 3500);
+// ─── RENDERIZADO COMPLETO DEL DASHBOARD Y LOS GRÁFICOS HORIZONTALES ────────────
+function renderDashboard() {
+  // Cálculo de Métricas en Ceros por Defecto
+  const total = LEADS.length;
+  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado').length;
+  const perdidos = LEADS.filter(l => l.estado === 'Cerrado Perdido').length;
+  const abandonados = LEADS.filter(l => l.estado === 'Abandonado').length;
+  
+  const tasa = total > 0 ? Math.round((ganados / total) * 100) : 0;
+  
+  // Calcular Seg. Vencidos
+  const hoy = new Date();
+  const vencidos = LEADS.filter(l => {
+    if (!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
+    return new Date(l.proximoseg) < hoy;
+  }).length;
+
+  // Calcular montos acumulados
+  let montoCerradoTotal = 0;
+  let pipelinePotencialTotal = 0;
+
+  LEADS.forEach(l => {
+    const valor = extraerNumeroMonto(l.presupuesto);
+    if (l.estado === 'Cerrado Ganado') {
+      montoCerradoTotal += valor;
+    } else if (l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado') {
+      pipelinePotencialTotal += valor;
+    }
+  });
+
+  // Asignar los valores calculados en las etiquetas HTML
+  document.getElementById('m-total').textContent = total;
+  document.getElementById('m-ganados').textContent = ganados;
+  document.getElementById('m-tasa').textContent = `${tasa}%`;
+  document.getElementById('m-monto-cerrado').textContent = `$${montoCerradoTotal.toLocaleString('es-MX')}`;
+  document.getElementById('m-monto-potencial').textContent = `$${pipelinePotencialTotal.toLocaleString('es-MX')}`;
+  document.getElementById('m-vencidos').textContent = vencidos;
+  document.getElementById('m-abandonados').textContent = abandonados;
+  document.getElementById('m-perdidos').textContent = perdidos;
+
+  // Renderizar Gráficas de Barras
+  construirBarrasGrafica('chart-fuente', agruparPorClave(LEADS, 'fuente'));
+  construirBarrasGrafica('chart-estado', agruparPorClave(LEADS, 'estado'));
+  construirBarrasGrafica('chart-responsable', agruparPorClave(LEADS, 'responsable'));
+  construirBarrasGrafica('chart-producto', agruparPorClave(LEADS, 'producto'));
+
+  // Cargar Tabla Inferior
+  renderTablaSeguimientoActivos();
 }
 
-function handleLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  if ((user === AUTH_USER && pass === AUTH_PASS) || ADMINS.find(u => u.user === user && u.pass === pass)) {
-    sessionStorage.setItem('crm_logged_in', 'true');
-    document.getElementById('login-container').style.display = 'none';
-    showNotification("Acceso Correcto.");
-  } else { document.getElementById('login-error').style.display = 'block'; }
+function extraerNumeroMonto(str) {
+  if (!str) return 0;
+  if (str.includes('< 5,000') || str.includes('$5,000')) return 5000;
+  if (str.includes('15,000')) return 15000;
+  if (str.includes('50,000')) return 50000;
+  return 0;
 }
 
-function verificarSeguimientosHoy(leads) {
+function agruparPorClave(leads, clave) {
+  const conteo = {};
+  leads.forEach(l => {
+    const valor = l[clave] || 'Por definir';
+    conteo[valor] = (conteo[valor] || 0) + 1;
+  });
+  return Object.entries(conteo).sort((a, b) => b[1] - a[1]);
+}
+
+// Construye barras de colores de forma dinámica
+function construirBarrasGrafica(elementId, dataset) {
+  const contenedor = document.getElementById(elementId);
+  if (!contenedor) return;
+
+  if (dataset.length === 0) {
+    contenedor.innerHTML = `<div class="no-records">Sin registros</div>`;
+    return;
+  }
+
+  const maxVal = Math.max(...dataset.map(x => x[1]));
+  let html = '';
+
+  dataset.forEach((item, index) => {
+    const nombre = item[0];
+    const cantidad = item[1];
+    const porcentaje = maxVal > 0 ? (cantidad / maxVal) * 100 : 0;
+    const color = CHART_COLORS[index % CHART_COLORS.length];
+
+    html += `
+      <div class="custom-bar-row">
+        <div class="custom-bar-info">
+          <span>${nombre}</span>
+          <span>${cantidad}</span>
+        </div>
+        <div class="custom-bar-bg">
+          <div class="custom-bar-fill" style="width: ${porcentaje}%; background-color: ${color};"></div>
+        </div>
+      </div>
+    `;
+  });
+
+  contenedor.innerHTML = html;
+}
+
+function renderTablaSeguimientoActivos() {
+  const tbody = document.getElementById('dashboard-table-body');
+  if (!tbody) return;
+
+  // Filtrar solo los próximos seguimientos activos agendados
+  const activos = LEADS.filter(l => l.proximoseg && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado');
+
+  if (activos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="no-data-row">No hay seguimientos agendados</td></tr>`;
+    return;
+  }
+
+  let html = '';
+  activos.forEach(l => {
+    const fStr = new Date(l.proximoseg).toLocaleString('es-MX', { hour12: false }).substring(0, 16);
+    html += `
+      <tr style="cursor:pointer;" onclick="togglePanel(true, ${l.id})">
+        <td><strong>#${l.id}</strong></td>
+        <td>${l.nombre}</td>
+        <td><span class="tab" style="padding:2px 8px; font-size:11px; display:inline; background:var(--bg2);">${l.estado}</span></td>
+        <td>${l.responsable ? l.responsable.split(' - ')[0] : ''}</td>
+        <td><i class="ti ti-alarm" style="color:#f59e0b;"></i> ${fStr}</td>
+        <td><strong>${l.presupuesto || '$0'}</strong></td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+}
+
+// Control global de cambio de vista en pestañas
+function switchTab(target, tabElement) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tabElement.classList.add('active');
+
+  ['tab-dashboard', 'tab-leads', 'tab-seguimiento', 'tab-reportes', 'tab-config'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const activeView = document.getElementById(`tab-${target}`);
+  if (activeView) activeView.style.display = 'block';
+}
+
+function notify(msg) {
+  const toast = document.getElementById('notif-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3500);
+}
+
+function revisarSeguimientosHoy(leads) {
   const hoyStr = new Date().toLocaleDateString('es-MX');
-  const conteo = leads.filter(l => l.proximoseg && new Date(l.proximoseg).toLocaleDateString('es-MX') === hoyStr && l.estado !== 'Cerrado Ganado').length;
-  if (conteo > 0) alert(`📢 Tienes (${conteo}) seguimientos programados para hoy.`);
+  const hoyLeads = leads ? leads.filter(l => {
+    if (!l.proximoseg) return false;
+    const f = new Date(l.proximoseg);
+    return f.toLocaleDateString('es-MX') === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
+  }) : [];
+
+  if (hoyLeads.length > 0) {
+    setTimeout(() => {
+      alert(`📢 ¡Recordatorio de Ventas!\nTienes (${hoyLeads.length}) seguimientos agendados para el día de hoy.`);
+    }, 1000);
+  }
 }
 
-window.onload = async function() {
-  await cargarDatosDesdeSupabase();
+function exportCSV() {
+  if (LEADS.length === 0) {
+    alert("No hay registros en Supabase para exportar.");
+    return;
+  }
+  let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\n";
+  LEADS.forEach(l => {
+    csv += `"${l.id}","${l.nombre}","${l.empresa || ''}","${l.telefono || ''}","${l.correo || ''}","${l.ciudad || ''}","${l.estado_rep || ''}","${l.fuente}","${l.producto}","${l.presupuesto}","${l.responsable}","${l.prioridad}","${l.estado}","${l.proximoseg || ''}"\n`;
+  });
+  
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute("download", `Leads_Herbolaria_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+async function inicializarSistema() {
+  await cargarConfiguracionesBase();
+  await fetchLeads();
+}
+
+// Inicialización de la persistencia de la sesión
+window.onload = function() {
   if (sessionStorage.getItem('crm_logged_in') === 'true') {
     document.getElementById('login-container').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    inicializarSistema();
   }
 };

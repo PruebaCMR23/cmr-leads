@@ -4,46 +4,386 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRM Leads — Herbolaria Saludable</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGk4=">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <!-- INTERFAZ DE LOGIN SEGURA -->
+  <div id="login-container" class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo"><i class="ti ti-lock"></i></div>
+      <h2>Acceso al CRM</h2>
+      <p>Herbolaria Saludable</p>
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Ingresa tu usuario">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;" onclick="handleLogin()">
+        <i class="ti ti-login"></i> Iniciar Sesión
+      </button>
+      <div id="login-error" class="login-error-msg" style="display:none;">Usuario o contraseña incorrectos</div>
+    </div>
+  </div>
+
   <div class="layout">
+    <!-- BARRA SUPERIOR -->
     <div class="top-bar">
       <div class="top-title">
-        <div class="logo"><i class="ti ti-address-book"></i></div>
-        CRM Leads — Herbolaria Saludable
+        <div class="logo"><i class="ti ti-spa"></i></div>
+        <div>
+          <h1 id="app-title">CRM Leads</h1>
+          <div style="font-size:11px; color:var(--text2); font-weight:normal; margin-top:2px;">
+            Manejo Orgánico y Automatización Sincronizada
+          </div>
+        </div>
       </div>
       <div class="top-actions">
-        <button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar CSV</button>
-        <button class="btn btn-primary" onclick="openNewLead()"><i class="ti ti-plus"></i> Nuevo Lead</button>
+        <button class="btn btn-primary" onclick="abrirPanelNuevo()"><i class="ti ti-plus"></i> Nuevo Lead</button>
       </div>
     </div>
 
+    <!-- PESTAÑAS (TABS) -->
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('dashboard',this)"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
-      <div class="tab" onclick="switchTab('leads',this)"><i class="ti ti-users"></i> Todos los Leads</div>
-      <div class="tab" onclick="switchTab('seguimiento',this)"><i class="ti ti-clock"></i> Seguimiento</div>
-      <div class="tab" onclick="switchTab('reportes',this)"><i class="ti ti-chart-bar"></i> Reportes</div>
+      <div class="tab active" id="t-dashboard" onclick="cambiarTab('dashboard')"><i class="ti ti-chart-bar"></i> Dashboard</div>
+      <div class="tab" id="t-leads" onclick="cambiarTab('leads')"><i class="ti ti-list"></i> Base de Leads</div>
+      <div class="tab" id="t-seguimiento" onclick="cambiarTab('seguimiento')"><i class="ti ti-calendar-event"></i> Seguimiento</div>
+      <div class="tab" id="t-config" onclick="cambiarTab('config')"><i class="ti ti-settings"></i> Configuración</div>
     </div>
 
-    <!-- CONTENEDORES PARA CADA VISTA DE LA APP -->
-    <div id="tab-dashboard"></div>
-    <div id="tab-leads" style="display:none"></div>
-    <div id="tab-seguimiento" style="display:none"></div>
-    <div id="tab-reportes" style="display:none"></div>
-  </div>
+    <!-- PESTAÑA: DASHBOARD -->
+    <div id="tab-dashboard">
+      <!-- BLOQUE DE CONTENEDORES / RECUADROS INDEPENDIENTES (KPIs) -->
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-label">Total Leads</div>
+          <div class="kpi-val blue" id="kpi-total-leads">0</div>
+          <div class="kpi-sub">Acumulado</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Cerrados Ganados</div>
+          <div class="kpi-val green" id="kpi-cerrados-ganados">0</div>
+          <div class="kpi-sub">Conversiones</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Tasa de Conversión</div>
+          <div class="kpi-val" id="kpi-tasa-conversion">0%</div>
+          <div class="progress"><div class="progress-fill" id="kpi-progress-bar" style="width: 0%"></div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Monto Cerrado</div>
+          <div class="kpi-val green" id="kpi-monto-cerrado">$0</div>
+          <div class="kpi-sub">Ventas reales</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Pipeline Potencial</div>
+          <div class="kpi-val amber" id="kpi-pipeline-potencial">$0</div>
+          <div class="kpi-sub">Oportunidades abiertas</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Seg. Vencidos</div>
+          <div class="kpi-val red" id="kpi-seg-vencidos">0</div>
+          <div class="kpi-sub">Requieren atención</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Abandonados</div>
+          <div class="kpi-val" id="kpi-abandonados" style="color: var(--text2);">0</div>
+          <div class="kpi-sub">Prospectos perdidos</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Cerrados Perdidos</div>
+          <div class="kpi-val red" id="kpi-cerrados-perdidos">0</div>
+          <div class="kpi-sub">Cerrados Perdidos</div>
+        </div>
+      </div>
 
-  <!-- OVERLAY DE DESPLAZAMIENTO LATERAL PARA AGREGAR O EDITAR LEADS -->
-  <div class="overlay" id="overlay" onclick="closePanel(event)">
-    <div class="panel" id="panel">
-      <button class="panel-close" onclick="closePanel(null)" title="Cerrar"><i class="ti ti-x"></i></button>
-      <div id="panel-content"></div>
+      <!-- SECCIÓN GRÁFICOS ESTRUCTURADOS -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-share"></i> Leads por fuente</div>
+          <div class="bar-chart" id="chart-fuentes"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-tournament"></i> Estado del pipeline</div>
+          <div class="bar-chart" id="chart-etapas"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-user"></i> Leads por responsable</div>
+          <div class="bar-chart" id="chart-responsables"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-package"></i> Productos con más interés</div>
+          <div class="bar-chart" id="chart-productos"></div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN TABLA INFERIOR DEL DASHBOARD -->
+      <div style="margin-top: 24px;">
+        <div class="seg-section-title futuros">
+          <i class="ti ti-calendar-time"></i> <span>Próximos seguimientos activos</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Responsable</th>
+                <th>Próximo Seg.</th>
+                <th>Monto Pot.</th>
+              </tr>
+            </thead>
+            <tbody id="table-dashboard-seguimientos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PESTAÑA: BASE DE LEADS -->
+    <div id="tab-leads" style="display:none;">
+      <div class="filters">
+        <input type="text" id="search-input" placeholder="Buscar por nombre, empresa, tel..." oninput="filtrarLeads()">
+        <select id="filter-etapa" onchange="filtrarLeads()"><option value="">Todas las etapas</option></select>
+        <select id="filter-fuente" onchange="filtrarLeads()"><option value="">Todas las fuentes</option></select>
+        <select id="filter-ejecutivo" onchange="filtrarLeads()"><option value="">Todos los ejecutivos</option></select>
+        <span class="count-label" id="leads-count">Mostrando: 0 leads</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Contacto</th>
+              <th>Producto / Monto</th>
+              <th>Origen / Canal</th>
+              <th>Asignación</th>
+              <th>Estado Pipeline</th>
+              <th>Próx. Seg.</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PESTAÑA: SEGUIMIENTO CON FILTRO TEMPORAL INTEGRADO -->
+    <div id="tab-seguimiento" style="display:none;">
+      <div class="filters" style="margin-bottom: 20px;">
+        <label style="font-size:12px; font-weight:600; color:var(--text2); text-transform:uppercase;">Reporte de Tareas:</label>
+        <select id="filter-reporte-tiempo" onchange="filtrarSeguimientosPorTiempo()">
+          <option value="todos">Todos los seguimientos</option>
+          <option value="vencido">Vencido</option>
+          <option value="hoy">Para hoy</option>
+          <option value="14dias">Para los próximos 14 días</option>
+        </select>
+      </div>
+
+      <div class="seg-section-title atrasados">
+        <i class="ti ti-alert-circle"></i> <span>SEGUIMIENTOS CRÍTICOS FILTRADOS</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Teléfono</th>
+              <th>Producto</th>
+              <th>Responsable</th>
+              <th>Fecha Programada</th>
+              <th>Notas Anteriores</th>
+            </tr>
+          </thead>
+          <tbody id="table-seg-dinamico"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PESTAÑA: CONFIGURACIÓN -->
+    <div id="tab-config" style="display:none;">
+      <div class="config-container">
+        <div class="config-box">
+          <h3><i class="ti ti-settings-automation"></i> Personalización General de la App</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
+            <div class="form-group">
+              <label>Nombre Corporativo de la Aplicación</label>
+              <input type="text" id="cfg-nombre-app">
+            </div>
+            <div class="form-group">
+              <label>Divisa Local</label>
+              <select id="cfg-moneda">
+                <option value="MXN">Pesos Mexicanos (MXN)</option>
+                <option value="USD">Dólares Americanos (USD)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:12px;" onclick="guardarConfigGeneral()"><i class="ti ti-device-floppy"></i> Guardar Cambios Generales</button>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-tournament"></i> Etapas del Pipeline de Ventas</h3>
+          <div class="config-tags-wrapper" id="box-etapas"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-etapa" placeholder="Nueva etapa (ej. Demo Pendiente)">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('pipeline_etapas', 'add-etapa')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-package"></i> Catálogo de Productos / Servicios</h3>
+          <div class="config-tags-wrapper" id="box-productos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-producto" placeholder="Nombre del producto">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('productos', 'add-producto')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-share"></i> Orígenes / Canales de Entrada</h3>
+          <div class="config-tags-wrapper" id="box-fuentes"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-fuente" placeholder="Nueva fuente (ej. TikTok Orgánico)">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('fuentes', 'add-fuente')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-coin"></i> Rangos de Presupuesto Comercial</h3>
+          <div class="config-tags-wrapper" id="box-presupuestos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-presupuesto" placeholder="Ej. $5,000 - $10,000">
+            <button class="btn btn-primary" onclick="agregarElementoConfig('presupuestos', 'add-presupuesto')">Añadir</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="notif" id="notif"></div>
+  <!-- CAPA OVERLAY PARA PANEL LATERAL DESPLAZABLE -->
+  <div id="overlay" class="overlay" onclick="togglePanel(false)"></div>
 
+  <!-- PANEL LATERAL CRUD DESPLAZABLE (NUEVO LEAD / EDICIÓN) -->
+  <div id="panel" class="panel">
+    <button class="panel-close" onclick="togglePanel(false)"><i class="ti ti-x"></i></button>
+    <div class="panel-header" style="background:transparent; border:none; padding:0; margin-bottom:15px;">
+      <h2 id="panel-title-text" class="panel-title">Nuevo Lead / Registro</h2>
+    </div>
+    
+    <div class="panel-body">
+      <input type="hidden" id="n-id">
+      
+      <div class="form-group">
+        <label>Nombre completo *</label>
+        <input type="text" id="n-nombre" placeholder="Ej. Juan Pérez">
+      </div>
+      
+      <div class="form-group">
+        <label>Empresa</label>
+        <input type="text" id="n-empresa" placeholder="Ej. Distribuidora Alfa">
+      </div>
+
+      <div class="form-group">
+        <label>Teléfono / WhatsApp</label>
+        <input type="text" id="n-telefono" placeholder="Ej. 2221234567">
+      </div>
+
+      <div class="form-group">
+        <label>Correo electrónico</label>
+        <input type="email" id="n-correo" placeholder="Ej. juan@correo.com">
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Ciudad</label>
+          <input type="text" id="n-ciudad" placeholder="Ej. Puebla">
+        </div>
+        <div class="form-group">
+          <label>Estado</label>
+          <input type="text" id="n-estado-geo" placeholder="Ej. Puebla">
+        </div>
+      </div>
+
+      <div style="margin: 15px 0 5px 0; border-bottom: 1px dashed var(--border); padding-bottom: 3px;">
+        <span style="font-size:11px; font-weight:700; color:var(--green); uppercase">Información comercial</span>
+      </div>
+
+      <div class="form-group">
+        <label>Fuente *</label>
+        <select id="n-fuente"></select>
+      </div>
+
+      <div class="form-group">
+        <label>Producto de interés</label>
+        <select id="n-producto"></select>
+      </div>
+
+      <div class="form-group">
+        <label>Presupuesto estimado</label>
+        <select id="n-presupuesto"></select>
+      </div>
+
+      <div class="form-group">
+        <label>Responsable comercial</label>
+        <select id="n-responsable"></select>
+      </div>
+
+      <div class="form-group">
+        <label>Ejecutivo asignado</label>
+        <select id="n-ejecutivo"></select>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Prioridad</label>
+          <select id="n-prioridad">
+            <option value="Alta">Alta</option>
+            <option value="Media" selected>Media</option>
+            <option value="Baja">Baja</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Estado del Pipeline</label>
+          <select id="n-situacion"></select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Monto potencial (MXN)</label>
+        <input type="number" id="n-monto" value="0">
+      </div>
+
+      <div class="form-group">
+        <label>Próximo seguimiento</label>
+        <input type="datetime-local" id="n-seg">
+      </div>
+
+      <div class="form-group">
+        <label>Notas iniciales</label>
+        <textarea id="n-notas" rows="4" placeholder="Escribe aquí las bitácoras o notas iniciales..."></textarea>
+      </div>
+
+      <div class="panel-actions">
+        <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" onclick="eliminarLeadActual()">
+          <i class="ti ti-trash"></i> Eliminar
+        </button>
+        <button class="btn" style="margin-left:auto;" onclick="togglePanel(false)">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarLeadSupabase()">
+          <i class="ti ti-device-floppy"></i> Guardar Prospecto
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIFICACIÓN EN TOAST -->
+  <div id="notif" class="toast-notification" style="position:fixed; bottom:20px; right:20px; background:var(--green); color:#fff; padding:12px 24px; border-radius:var(--radius); display:none; z-index:10000; font-weight:500;"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>

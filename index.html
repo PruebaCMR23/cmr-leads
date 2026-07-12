@@ -3,158 +3,315 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CRM Leads - Herbolaria Saludable</title>
-  <!-- Google Fonts & Icons -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  
-  <!-- Estilos en la raíz -->
+  <title>CRM Leads — Herbolaria Saludable</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="styles.css">
-  
-  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-  <!-- Barra Lateral (Sidebar) -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <span class="material-symbols-outlined logo-icon">spa</span>
-      <h2>CRM Herbolaria</h2>
-    </div>
-    <nav class="sidebar-menu">
-      <button class="menu-item active" data-tab="dashboard">
-        <span class="material-symbols-outlined">dashboard</span>
-        <span>Dashboard</span>
-      </button>
-      <button class="menu-item" data-tab="leads">
-        <span class="material-symbols-outlined">group</span>
-        <span>Leads</span>
-      </button>
-      <button class="menu-item" data-tab="config">
-        <span class="material-symbols-outlined">settings</span>
-        <span>Configuración</span>
-      </button>
-    </nav>
-  </aside>
-
-  <!-- Contenido Principal -->
-  <main class="main-content">
-    <!-- Header -->
-    <header class="top-header">
-      <div class="header-search">
-        <span class="material-symbols-outlined">search</span>
-        <input type="text" id="global-search" placeholder="Buscar leads...">
+  <div id="login-container" class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo"><i class="ti ti-lock"></i></div>
+      <h2>Acceso al CRM</h2>
+      <p>Herbolaria Saludable</p>
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Ingresa tu usuario">
       </div>
-      <button class="btn btn-primary" id="btn-new-lead">
-        <span class="material-symbols-outlined">add</span>
-        Nuevo Lead
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;" onclick=\"handleLogin()\">
+        <i class="ti ti-login"></i> Iniciar Sesión
       </button>
-    </header>
+      <div id="login-error" class="login-error-msg" style="display:none;">Usuario o contraseña incorrectos</div>
+    </div>
+  </div>
 
-    <!-- Contenedores de Vistas -->
-    <div id="tab-dashboard" class="tab-content active">
-      <!-- El JS inyectará las métricas aquí dinámicamente -->
+  <div class="layout">
+    <div class="top-bar">
+      <div class="top-title">
+        <div class="logo"><i class="ti ti-spa"></i></div>
+        <div>
+          <h1 id="app-title">CRM Leads</h1>
+          <div style="font-size:11px; color:var(--text2); font-weight:normal; margin-top:2px;">
+            Manejo Orgánico y Automatización Sincronizada
+          </div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-primary" onclick="abrirPanelNuevo()"><i class="ti ti-plus"></i> Nuevo Lead</button>
+      </div>
     </div>
 
-    <div id="tab-leads" class="tab-content">
-      <div class="table-container">
-        <table class="leads-table">
+    <div class="tabs">
+      <div class="tab active" id="t-dashboard" onclick="cambiarTab('dashboard')"><i class="ti ti-chart-bar"></i> Dashboard</div>
+      <div class="tab" id="t-leads" onclick="cambiarTab('leads')"><i class="ti ti-list"></i> Base de Leads</div>
+      <div class="tab" id="t-seguimiento" onclick="cambiarTab('seguimiento')"><i class="ti ti-calendar-event"></i> Seguimiento</div>
+      <div class="tab" id="t-config" onclick="cambiarTab('config')"><i class="ti ti-settings"></i> Configuración</div>
+    </div>
+
+    <div id="tab-dashboard">
+      <div class="kpi-grid" id="dashboard-kpis"></div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-chart-pie"></i> Distribución por Etapa (Monto)</div>
+          <div class="bar-chart" id="chart-etapas"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><i class="ti ti-filter"></i> Origen de Prospectos (Cantidad)</div>
+          <div class="bar-chart" id="chart-fuentes"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-leads" style="display:none;">
+      <div class="filters">
+        <input type="text" id="search-input" placeholder="Buscar por nombre, empresa, tel..." oninput="filtrarLeads()">
+        <select id="filter-etapa" onchange="filtrarLeads()">
+          <option value="">Todas las etapas</option>
+        </select>
+        <select id="filter-fuente" onchange="filtrarLeads()">
+          <option value="">Todas las fuentes</option>
+        </select>
+        <select id="filter-ejecutivo" onchange="filtrarLeads()">
+          <option value="">Todos los ejecutivos</option>
+        </select>
+        <span class="count-label" id="leads-count">Mostrando: 0 leads</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Teléfono</th>
-              <th>Producto</th>
-              <th>Origen</th>
-              <th>Ejecutivo</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+              <th>Prospecto</th>
+              <th>Contacto</th>
+              <th>Producto / Monto</th>
+              <th>Origen / Canal</th>
+              <th>Asignación</th>
+              <th>Estado Pipeline</th>
+              <th>Próx. Seg.</th>
             </tr>
           </thead>
-          <tbody id="leads-tbody">
-            <!-- Cargados dinámicamente -->
-          </tbody>
+          <tbody id="table-body"></tbody>
         </table>
       </div>
     </div>
 
-    <div id="tab-config" class="tab-content">
-      <div class="config-card">
-        <h3>Ajustes del Sistema</h3>
-        <p>Gestiona los parámetros operativos de tu CRM.</p>
-        <!-- Formulario o controles de configuración pueden ir aquí -->
+    <div id="tab-seguimiento" style="display:none;">
+      <div class="seg-section-title" style="color:#a32d2d; margin-bottom:14px;">
+        <i class="ti ti-alert-circle"></i> <span>SEGUIMIENTOS ATRASADOS / VENCIDOS</span>
+      </div>
+      <div class="table-wrap" style="margin-bottom:28px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Teléfono</th>
+              <th>Producto</th>
+              <th>Responsable</th>
+              <th>Fecha Programada</th>
+              <th>Notas Anteriores</th>
+            </tr>
+          </thead>
+          <tbody id="table-seg-atrasados"></tbody>
+        </table>
+      </div>
+
+      <div class="seg-section-title" style="color:var(--green); margin-bottom:14px;">
+        <i class="ti ti-calendar-check"></i> <span>SEGUIMIENTOS PARA HOY Y FUTUROS</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Prospecto</th>
+              <th>Teléfono</th>
+              <th>Producto</th>
+              <th>Responsable</th>
+              <th>Fecha Programada</th>
+              <th>Notas Anteriores</th>
+            </tr>
+          </thead>
+          <tbody id="table-seg-futuros"></tbody>
+        </table>
       </div>
     </div>
-  </main>
 
-  <!-- Panel Lateral / Modal (Formulario de Leads) -->
-  <div class="overlay" id="form-overlay"></div>
-  <div class="side-panel" id="lead-panel">
-    <div class="panel-header">
-      <h3 id="panel-title">Nuevo Lead</h3>
-      <button class="btn-close" id="btn-close-panel">
-        <span class="material-symbols-outlined">close</span>
-      </button>
+    <div id="tab-config" style="display:none;">
+      <div class="config-container">
+        <div class="config-box">
+          <h3><i class="ti ti-settings-automation"></i> Personalización General de la App</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
+            <div class="form-group">
+              <label>Nombre Corporativo de la Aplicación</label>
+              <input type="text" id="cfg-nombre-app">
+            </div>
+            <div class="form-group">
+              <label>Divisa Local</label>
+              <select id="cfg-moneda">
+                <option value="MXN">Pesos Mexicanos (MXN)</option>
+                <option value="USD">Dólares Americanos (USD)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:12px;" onclick="guardarConfigGeneral()"><i class="ti ti-device-floppy"></i> Guardar Cambios Generales</button>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-tournament"></i> Etapas del Pipeline de Ventas</h3>
+          <div class="config-tags-wrapper" id="box-etapas"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-etapa" placeholder="Nueva etapa (ej. Demo Pendiente)">
+            <button class="btn" onclick="agregarElementoConfig('pipeline_etapas', 'add-etapa')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-package"></i> Catálogo de Productos / Servicios</h3>
+          <div class="config-tags-wrapper" id="box-productos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-producto" placeholder="Nombre del producto">
+            <button class="btn" onclick="agregarElementoConfig('productos', 'add-producto')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-share"></i> Fuentes de Tráfico / Canales</h3>
+          <div class="config-tags-wrapper" id="box-fuentes"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-fuente" placeholder="Canal (ej. TikTok Organico)">
+            <button class="btn" onclick="agregarElementoConfig('fuentes', 'add-fuente')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-users-group"></i> Equipo de Ejecutivos y Asesores</h3>
+          <div class="config-tags-wrapper" id="box-ejecutivos"></div>
+          <div class="config-input-group">
+            <input type="text" id="add-ejecutivo" placeholder="Nombre del asesor">
+            <button class="btn" onclick="agregarElementoConfig('ejecutives', 'add-ejecutivo')">Añadir</button>
+          </div>
+        </div>
+
+        <div class="config-box">
+          <h3><i class="ti ti-shield-lock"></i> Gestión de Usuarios con Acceso Directo</h3>
+          <div id="box-usuarios" style="margin-top:12px;"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+            <input type="text" id="add-user-name" placeholder="Usuario nuevo">
+            <input type="text" id="add-user-pass" placeholder="Contraseña nueva">
+          </div>
+          <button class="btn" style="margin-top:12px;" onclick="agregarUsuarioConfig()">Registrar Usuario</button>
+        </div>
+      </div>
     </div>
-    <form id="lead-form" class="panel-form">
-      <input type="hidden" id="lead-id">
-      
-      <div class="form-group">
-        <label for="lead-name">Nombre Completo *</label>
-        <input type="text" id="lead-name" required placeholder="Ej. Juan Pérez">
-      </div>
-
-      <div class="form-group">
-        <label for="lead-phone">Teléfono / WhatsApp *</label>
-        <input type="tel" id="lead-phone" required placeholder="Ej. +52 222 123 4567">
-      </div>
-
-      <div class="form-group">
-        <label for="lead-product">Producto de Interés *</label>
-        <select id="lead-product" required>
-          <option value="">Selecciona un producto</option>
-          <!-- Productos dinámicos desde Config -->
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="lead-origin">Origen del Lead *</label>
-        <select id="lead-origin" required>
-          <option value="">Selecciona el origen</option>
-          <!-- Orígenes dinámicos desde Config -->
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="lead-agent">Ejecutivo Asignado</label>
-        <select id="lead-agent">
-          <option value="">Selecciona un ejecutivo</option>
-          <!-- Ejecutivos dinámicos desde Config -->
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="lead-status">Estado del Lead</label>
-        <select id="lead-status">
-          <option value="Nuevo">Nuevo</option>
-          <option value="En Proceso">En Proceso</option>
-          <option value="Convertido">Convertido</option>
-          <option value="Perdido">Perdido</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="lead-notes">Notas / Comentarios</label>
-        <textarea id="lead-notes" rows="4" placeholder="Detalles adicionales de la interacción..."></textarea>
-      </div>
-
-      <button type="submit" class="btn btn-primary btn-block">Guardar Lead</button>
-    </form>
   </div>
 
-  <!-- Script desde la carpeta app -->
+  <div class="overlay" id="overlay" onclick="closePanel(event)"></div>
+  <div class="panel" id="panel">
+    <button class="panel-close" onclick="togglePanel(false)"><i class="ti ti-x"></i></button>
+    <h2 class="panel-title" id="panel-title-text">Nuevo Lead / Registro</h2>
+
+    <div class="section-sep"><i class="ti ti-user"></i> Información General del Prospecto</div>
+    <input type="hidden" id="n-id">
+    <div class="form-group">
+      <label>Nombre del Cliente *</label>
+      <input type="text" id="n-nombre" placeholder="Ej. Miguel Sarmiento" required>
+    </div>
+    <div class="form-group">
+      <label>Empresa / Organización</label>
+      <input type="text" id="n-empresa" placeholder="Nombre del negocio">
+    </div>
+
+    <div class="field-row">
+      <div class="form-group">
+        <label>Teléfono (WhatsApp)</label>
+        <input type="text" id="n-telefono" placeholder="Ej. 2221234567">
+      </div>
+      <div class="form-group">
+        <label>Correo Electrónico</label>
+        <input type="email" id="n-correo" placeholder="correo@ejemplo.com">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="form-group">
+        <label>Estado / Región</label>
+        <input type="text" id="n-estado-geo" placeholder="Ej. Puebla">
+      </div>
+      <div class="form-group">
+        <label>País</label>
+        <input type="text" id="n-pais" value="México">
+      </div>
+    </div>
+
+    <div class="section-sep"><i class="ti ti-coin"></i> Perfil Comercial y Asignación Interna</div>
+    <div class="field-row">
+      <div class="form-group">
+        <label>Fuente u Origen</label>
+        <select id="n-fuente"></select>
+      </div>
+      <div class="form-group">
+        <label>Producto / Interés</label>
+        <select id="n-producto"></select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="form-group">
+        <label>Presupuesto</label>
+        <select id="n-presupuesto"></select>
+      </div>
+      <div class="form-group">
+        <label>Monto Estimado de Venta</label>
+        <input type="number" id="n-monto" value="0" step="0.01">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="form-group">
+        <label>Departamento Responsable</label>
+        <select id="n-responsable"></select>
+      </div>
+      <div class="form-group">
+        <label>Ejecutivo Asignado</label>
+        <select id="n-ejecutivo"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Prioridad</label>
+      <select id="n-prioridad"></select>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+      <div class="form-group">
+        <label>Estado del Pipeline</label>
+        <select id="n-situacion"></select>
+      </div>
+      <div class="form-group">
+        <label>Próximo Seguimiento</label>
+        <input type="datetime-local" id="n-seg">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:10px;">
+      <label>Notas y Bitácora de Seguimiento</label>
+      <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles de la llamada o acuerdo..."></textarea>
+    </div>
+
+    <div style="margin-top:24px; display:flex; justify-content:space-between;">
+      <button id="btn-delete-lead" class="btn btn-danger" onclick="eliminarLeadActual()"><i class="ti ti-trash"></i> Eliminar</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" onclick="togglePanel(false)">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarLeadSupabase()"><i class="ti ti-device-floppy"></i> Guardar Registro</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notif" id="notif">Operación realizada con éxito</div>
+
   <script src="app/app.js"></script>
 </body>
 </html>

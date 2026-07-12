@@ -98,27 +98,19 @@
       <div class="charts-grid">
         <div class="chart-box">
           <h3><i class="ti ti-chart-bar"></i> LEADS POR FUENTE</h3>
-          <div id="chart-fuente" class="chart-container-inner">
-            <div class="no-records">Sin registros</div>
-          </div>
+          <div id="chart-fuente" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
         </div>
         <div class="chart-box">
           <h3><i class="ti ti-route"></i> ESTADO DEL PIPELINE</h3>
-          <div id="chart-estado" class="chart-container-inner">
-            <div class="no-records">Sin registros</div>
-          </div>
+          <div id="chart-estado" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
         </div>
         <div class="chart-box">
           <h3><i class="ti ti-user-check"></i> LEADS POR RESPONSABLE</h3>
-          <div id="chart-responsable" class="chart-container-inner">
-            <div class="no-records">Sin registros</div>
-          </div>
+          <div id="chart-responsable" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
         </div>
         <div class="chart-box">
           <h3><i class="ti ti-bookmarks"></i> PRODUCTOS CON MÁS INTERÉS</h3>
-          <div id="chart-producto" class="chart-container-inner">
-            <div class="no-records">Sin registros</div>
-          </div>
+          <div id="chart-producto" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
         </div>
       </div>
 
@@ -137,22 +129,200 @@
               </tr>
             </thead>
             <tbody id="dashboard-table-body">
-              <tr>
-                <td colspan="6" class="no-data-row">No hay seguimientos agendados</td>
-              </tr>
+              <tr><td colspan="6" class="no-data-row">No hay seguimientos agendados</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <div id="tab-leads" style="display:none;"></div>
+    <div id="tab-leads" style="display:none;">
+      <div class="filter-box">
+        <input type="text" id="f-search" placeholder="🔍 Buscar nombre, empresa, teléfono..." oninput="filtrarTodosLosLeads()">
+        <select id="f-fuente" onchange="filtrarTodosLosLeads()"><option value="">Todas las fuentes</option></select>
+        <select id="f-estado" onchange="filtrarTodosLosLeads()"><option value="">Todos los estados</option></select>
+        <select id="f-responsable" onchange="filtrarTodosLosLeads()"><option value="">Todos los responsables</option></select>
+        <select id="f-prioridad" onchange="filtrarTodosLosLeads()"><option value="">Todas las prioridades</option></select>
+      </div>
+      <div class="table-container-box">
+        <div style="overflow-x:auto;">
+          <table class="crm-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Fecha</th>
+                <th>Nombre / Empresa</th>
+                <th>Contacto</th>
+                <th>Fuente</th>
+                <th>Producto(s)</th>
+                <th>Responsable</th>
+                <th>Estado</th>
+                <th>Prioridad</th>
+                <th>Próx. Seg.</th>
+                <th>Monto Pot.</th>
+              </tr>
+            </thead>
+            <tbody id="leads-table-body">
+              <tr><td colspan="11" class="no-data-row">No hay datos aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-    <div id="tab-seguimiento" style="display:none;"></div>
+    <div id="tab-seguimiento" style="display:none;">
+      <div class="seg-container">
+        <div class="seg-header text-red"><i class="ti ti-alert-triangle"></i> Vencidos (<span id="count-vencidos">0</span>)</div>
+        <div class="table-container-box" style="margin-bottom:20px;">
+          <div style="overflow-x:auto;">
+            <table class="crm-table">
+              <thead>
+                <tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Estado</th><th>Responsable</th><th>Fecha Seg.</th></tr>
+              </thead>
+              <tbody id="table-vencidos">
+                <tr><td colspan="6" class="no-data-row">Sin leads en esta categoría ✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-    <div id="tab-reportes" style="display:none;"></div>
+        <div class="seg-header text-orange"><i class="ti ti-calendar"></i> Para hoy (<span id="count-hoy">0</span>)</div>
+        <div class="table-container-box" style="margin-bottom:20px;">
+          <div style="overflow-x:auto;">
+            <table class="crm-table">
+              <thead>
+                <tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Estado</th><th>Responsable</th><th>Fecha Seg.</th></tr>
+              </thead>
+              <tbody id="table-hoy">
+                <tr><td colspan="6" class="no-data-row">Sin leads en esta categoría ✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-    <div id="tab-config" style="display:none;"></div>
+        <div class="seg-header text-blue"><i class="ti ti-calendar-time"></i> Próximos 14 días (<span id="count-futuros">0</span>)</div>
+        <div class="table-container-box">
+          <div style="overflow-x:auto;">
+            <table class="crm-table">
+              <thead>
+                <tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Estado</th><th>Responsable</th><th>Fecha Seg.</th></tr>
+              </thead>
+              <tbody id="table-futuros">
+                <tr><td colspan="6" class="no-data-row">Sin leads en esta categoría ✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-reportes" style="display:none;">
+      <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="metric-card">
+          <span class="metric-title">Leads este mes</span>
+          <div class="metric-value blue-text" id="r-mensual">0</div>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Conversión global</span>
+          <div class="metric-value green-text" id="r-conversion">0%</div>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Venta promedio</span>
+          <div class="metric-value orange-text" id="r-promedio">$0</div>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Total vendido</span>
+          <div class="metric-value green-text" id="r-total">$0</div>
+        </div>
+      </div>
+
+      <div class="charts-grid" style="grid-template-columns: 1fr; gap:20px; max-width: 800px; margin: 0 auto;">
+        <div class="chart-box">
+          <h3><i class="ti ti-calendar-stats"></i> LEADS POR MES</h3>
+          <div id="chart-rep-mes" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
+        </div>
+        <div class="chart-box">
+          <h3><i class="ti ti-layers-intersect"></i> VENTAS CERRADAS POR CANAL</h3>
+          <div id="chart-rep-canal" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
+        </div>
+        <div class="chart-box">
+          <h3><i class="ti ti-user-check"></i> CIERRES POR RESPONSABLE</h3>
+          <div id="chart-rep-responsable" class="chart-container-inner"><div class="no-records">Sin registros</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-config" style="display:none;">
+      <div class="config-container">
+        <div class="config-box">
+          <h3><i class="ti ti-world"></i> Fuente *</h3>
+          <div id="cfg-wrap-fuente" class="config-tags-wrapper"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="cfg-in-fuente" placeholder="Nueva fuente">
+            <button class="btn btn-primary" onclick="agregarConfigTag('fuente')">Agregar</button>
+          </div>
+        </div>
+        <div class="config-box">
+          <h3><i class="ti ti-package"></i> Producto de interés</h3>
+          <div id="cfg-wrap-producto" class="config-tags-wrapper"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="cfg-in-producto" placeholder="Nuevo producto">
+            <button class="btn btn-primary" onclick="agregarConfigTag('producto')">Agregar</button>
+          </div>
+        </div>
+        <div class="config-box">
+          <h3><i class="ti ti-coin"></i> Presupuesto estimado</h3>
+          <div id="cfg-wrap-presupuesto" class="config-tags-wrapper"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="cfg-in-presupuesto" placeholder="Nuevo rango (Ej: $5,000 - $10,000)">
+            <button class="btn btn-primary" onclick="agregarConfigTag('presupuesto')">Agregar</button>
+          </div>
+        </div>
+        <div class="config-box">
+          <h3><i class="ti ti-users-group"></i> Responsable comercial</h3>
+          <div id="cfg-wrap-responsable" class="config-tags-wrapper"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="cfg-in-responsable" placeholder="Nuevo departamento">
+            <button class="btn btn-primary" onclick="agregarConfigTag('responsable')">Agregar</button>
+          </div>
+        </div>
+        <div class="config-box">
+          <h3><i class="ti ti-id-badge"></i> Ejecutivo asignado</h3>
+          <div id="cfg-wrap-ejecutivo" class="config-tags-wrapper"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="cfg-in-ejecutivo" placeholder="Nombre completo - departamento">
+            <button class="btn btn-primary" onclick="agregarConfigTag('ejecutivo')">Agregar</button>
+          </div>
+        </div>
+        <div class="config-box">
+          <h3><i class="ti ti-shield-lock"></i> Usuario y contraseña incluyendo el principal</h3>
+          <div class="form-group" style="margin-top:10px;">
+            <label>Usuario Principal CRM</label>
+            <input type="text" id="cfg-main-user" readonly style="opacity:0.7;">
+          </div>
+          <div class="form-group">
+            <label>Nueva Contraseña Principal</label>
+            <div style="display:flex; gap:8px;">
+              <input type="password" id="cfg-main-pass" placeholder="Nueva contraseña">
+              <button class="btn btn-primary" onclick="actualizarPasswordPrincipal()">Actualizar</button>
+            </div>
+          </div>
+          <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+          <h4>Cuentas Adicionales de Administradores</h4>
+          <div style="overflow-x:auto; margin-top:10px;">
+            <table class="crm-table">
+              <thead><tr><th>Usuario</th><th>Contraseña</th><th>Acción</th></tr></thead>
+              <tbody id="cfg-table-admins"></tbody>
+            </table>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-top:12px; align-items:end;">
+            <div class="form-group" style="margin-bottom:0;"><label>Usuario</label><input type="text" id="cfg-add-user"></div>
+            <div class="form-group" style="margin-bottom:0;"><label>Contraseña</label><input type="password" id="cfg-add-pass"></div>
+            <button class="btn btn-primary" onclick="agregarAdminUser()">Añadir Cuenta</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="overlay" id="overlay" onclick="closePanel(event)">
@@ -163,82 +333,32 @@
       </div>
       <div class="panel-body">
         <p class="section-divider-title">DATOS DE CONTACTO</p>
-        <div class="form-group">
-          <label>Nombre Completo *</label>
-          <input type="text" id="n-nombre" placeholder="Ej. Juan Pérez">
-        </div>
-        <div class="form-group">
-          <label>Empresa</label>
-          <input type="text" id="n-empresa" placeholder="Nombre del negocio">
-        </div>
-        <div class="form-group">
-          <label>Teléfono / WhatsApp</label>
-          <input type="text" id="n-telefono" placeholder="10 dígitos numéricos">
-        </div>
-        <div class="form-group">
-          <label>Correo Electrónico</label>
-          <input type="email" id="n-correo" placeholder="correo@ejemplo.com">
-        </div>
+        <div class="form-group"><label>Nombre Completo *</label><input type="text" id="n-nombre" placeholder="Ej. Juan Pérez"></div>
+        <div class="form-group"><label>Empresa</label><input type="text" id="n-empresa" placeholder="Nombre del negocio"></div>
+        <div class="form-group"><label>Teléfono / WhatsApp</label><input type="text" id="n-telefono" placeholder="10 dígitos numéricos"></div>
+        <div class="form-group"><label>Correo Electrónico</label><input type="email" id="n-correo" placeholder="correo@ejemplo.com"></div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group">
-            <label>Ciudad</label>
-            <input type="text" id="n-ciudad" placeholder="Ciudad">
-          </div>
-          <div class="form-group">
-            <label>Estado</label>
-            <input type="text" id="n-estado" placeholder="Estado">
-          </div>
+          <div class="form-group"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div>
+          <div class="form-group"><label>Estado</label><input type="text" id="n-estado" placeholder="Estado"></div>
         </div>
-
         <p class="section-divider-title" style="margin-top:20px;">INFORMACIÓN COMERCIAL</p>
-        <div class="form-group">
-          <label>Fuente del Lead *</label>
-          <select id="n-fuente"></select>
-        </div>
-        <div class="form-group">
-          <label>Producto de Interés *</label>
-          <select id="n-producto"></select>
+        <div class="form-group"><label>Fuente del Lead *</label><select id="n-fuente"></select></div>
+        <div class="form-group"><label>Producto de Interés *</label><select id="n-producto"></select></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="form-group"><label>Presupuesto Estimado</label><select id="n-presupuesto"></select></div>
+          <div class="form-group"><label>Asignar Responsable *</label><select id="n-responsable"></select></div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group">
-            <label>Presupuesto Estimado</label>
-            <select id="n-presupuesto"></select>
-          </div>
-          <div class="form-group">
-            <label>Asignar Responsable *</label>
-            <select id="n-responsable"></select>
-          </div>
+          <div class="form-group"><label>Prioridad</label><select id="n-prioridad"></select></div>
+          <div class="form-group"><label>Estado del Pipeline</label><select id="n-situacion"></select></div>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group">
-            <label>Prioridad</label>
-            <select id="n-prioridad"></select>
-          </div>
-          <div class="form-group">
-            <label>Estado del Pipeline</label>
-            <select id="n-situacion"></select>
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-top:10px;">
-          <label>Próximo Seguimiento Agendado</label>
-          <input type="datetime-local" id="n-seg">
-        </div>
-
-        <div class="form-group" style="margin-top:10px;">
-          <label>Notas y Bitácora de Seguimiento</label>
-          <textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del primer contacto..."></textarea>
-        </div>
-
+        <div class="form-group" style="margin-top:10px;"><label>Próximo Seguimiento Agendado</label><input type="datetime-local" id="n-seg"></div>
+        <div class="form-group" style="margin-top:10px;"><label>Notas y Bitácora de Seguimiento</label><textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del primer contacto..."></textarea></div>
         <div class="panel-actions">
-          <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" onclick="eliminarLeadActual()">
-            <i class="ti ti-trash"></i> Eliminar
-          </button>
+          <button id="btn-delete-lead" class="btn btn-danger" style="display:none;" onclick="eliminarLeadActual()"><i class="ti ti-trash"></i> Eliminar</button>
           <div style="display:flex; gap:8px; margin-left:auto;">
             <button class="btn btn-secondary" onclick="togglePanel(false)">Cancelar</button>
-            <button class="btn btn-primary" onclick="guardarLeadFormulario()">
-              <i class="ti ti-device-floppy"></i> Guardar Lead
-            </button>
+            <button class="btn btn-primary" onclick="guardarLeadFormulario()"><i class="ti ti-device-floppy"></i> Guardar Lead</button>
           </div>
         </div>
       </div>

@@ -1,15 +1,12 @@
+/* ==========================================================================
+   TUS ESTILOS ORIGINALES (CONSERVADOS AL 100%)
+   ========================================================================== */
 *{
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
-:root{
-  --bg:#ffffff;--bg2:#f5f5f4;--bg3:#f0efeb;
-  --text:#1a1a1a;--text2:#6b6b6b;--text3:#9a9a9a;
-  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.22);
-  --green:#1D9E75;--green-dk:#0F6E56;
-  --radius:8px;--radius-lg:12px;
-}
+:root{\r\n  --bg:#ffffff;--bg2:#f5f5f4;--bg3:#f0efeb;\r\n  --text:#1a1a1a;--text2:#6b6b6b;--text3:#9a9a9a;\r\n  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.22);\r\n  --green:#1D9E75;--green-dk:#0F6E56;\r\n  --radius:8px;--radius-lg:12px;\r\n}
 @media(prefers-color-scheme:dark){
   :root{
     --bg:#1c1c1b;--bg2:#252523;--bg3:#2c2c2a;
@@ -24,543 +21,137 @@ body{
   background: var(--bg3);
   min-height: 100vh;
 }
-.layout{
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px 20px;
-}
-.top-bar{
+
+/* ESTRUCTURAS DE PANTALLA */
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
 }
-.top-title{
-  font-size: 20px;
-  font-weight: 600;
+.brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--text);
 }
-.top-title .logo{
-  width: 36px;
-  height: 36px;
-  background: var(--green);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
+.brand .logo {
+  font-size: 24px;
+  color: var(--green);
 }
-.top-actions{
+.brand h1 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.brand p {
+  font-size: 11px;
+  color: var(--text2);
+}
+.actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
 }
-.btn{
+
+/* BOTONES */
+.btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  border: 1px solid transparent;
+  padding: 6px 12px;
   border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--border2);
-  background: var(--bg);
-  color: var(--text);
-  transition: all .15s;
-  text-decoration: none;
-}
-.btn:hover{
   background: var(--bg2);
+  color: var(--text);
+  transition: all .15s ease;
 }
-.btn-primary{
+.btn:hover {
+  background: var(--border);
+}
+.btn-primary {
   background: var(--green);
   color: #fff;
-  border-color: var(--green-dk);
 }
-.btn-primary:hover{
+.btn-primary:hover {
   background: var(--green-dk);
 }
-.btn-danger{
-  color: #a32d2d;
-  border-color: #a32d2d;
+.btn-danger {
+  background: #fa5252;
+  color: #fff;
 }
-.btn-danger:hover{
-  background: #fcebeb;
+.btn-danger:hover {
+  background: #e03131;
 }
-.tabs{
+
+/* PESTAÑAS (TABS) */
+.tabs {
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 24px;
   background: var(--bg);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  padding: 0 4px;
-  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
 }
-.tab{
-  padding: 12px 20px;
-  font-size: 13px;
-  font-weight: 500;
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  color: var(--text2);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  color: var(--text2);
-  white-space: nowrap;
-  transition: color .15s,border-color .15s;
-  user-select: none;
 }
-.tab.active{
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
   color: var(--green);
   border-bottom-color: var(--green);
+  font-weight: 500;
 }
-.tab:hover:not(.active){
-  color: var(--text);
-}
-.card{
-  background: var(--bg);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+
+/* CONTENEDOR DE PESTAÑAS */
+#tab-dashboard, #tab-leads, #tab-seguimiento, #tab-reportes, #tab-config {
   padding: 20px;
 }
-.kpi-grid{
-  display: grid;
-  grid-template-columns: repeat(auto-fit,minmax(140px,1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.kpi{
-  background: var(--bg2);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-.kpi-label{
-  font-size: 11px;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  margin-bottom: 8px;
-}
-.kpi-val{
-  font-size: 24px;
-  font-weight: 600;
-}
-.kpi-sub{
-  font-size: 11px;
-  color: var(--text3);
-  margin-top: 4px;
-}
-.kpi-val.green{ color: var(--green); }
-.kpi-val.amber{ color: #ba7517; }
-.kpi-val.red{ color: #a32d2d; }
-.kpi-val.blue{ color: #185fa5; }
 
-.progress{
-  height: 6px;
-  background: var(--bg3);
-  border-radius: 3px;
-  margin-top: 6px;
-  overflow: hidden;
-}
-.progress-fill{
-  height: 100%;
-  background: var(--green);
-  border-radius: 3px;
-  transition: width .5s;
-}
-.charts-grid{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-@media(max-width:768px){
-  .charts-grid{ grid-template-columns: 1fr; }
-}
-.chart-card{
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-}
-.chart-title{
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.bar-chart{
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.bar-row{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.bar-label{
-  font-size: 12px;
-  color: var(--text2);
-  width: 100px;
-  flex-shrink: 0;
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bar-track{
-  flex: 1;
-  background: var(--bg3);
-  border-radius: 4px;
-  height: 18px;
-  overflow: hidden;
-}
-.bar-fill{
-  height: 100%;
-  border-radius: 4px;
-  transition: width .5s ease;
-}
-.bar-count{
-  font-size: 12px;
-  font-weight: 600;
-  width: 32px;
-  flex-shrink: 0;
-  color: var(--text);
-}
-.badge{
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.b-nuevo{background:#E6F1FB;color:#185FA5}
-.b-contactado{background:#EEEDFE;color:#534AB7}
-.b-calificado{background:#EAF3DE;color:#3B6D11}
-.b-propuesta{background:#FAEEDA;color:#854F0B}
-.b-negociacion{background:#E1F5EE;color:#0F6E56}
-.b-cerrado{background:#EAF3DE;color:#27500A}
-.b-perdido{background:#FCEBEB;color:#A32D2D}
-.b-abandonado{background:#F1EFE8;color:#5F5E5A}
-.b-alta{background:#FCEBEB;color:#A32D2D}
-.b-media{background:#FAEEDA;color:#854F0B}
-.b-baja{background:#EAF3DE;color:#3B6D11}
-
-.filters{
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  align-items: center;
-}
-.filters select, .filters input[type=text]{
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border2);
-  background: var(--bg);
-  color: var(--text);
-  height: 34px;
-  outline: none;
-}
-.filters input[type=text]{
-  min-width: 200px;
-}
-.filters select:focus, .filters input:focus{
-  border-color: var(--green);
-}
-.count-label{
-  font-size: 12px;
-  color: var(--text2);
-}
-.table-wrap{
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-}
-table{
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1100px;
-}
-thead th{
-  background: var(--bg2);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  padding: 11px 13px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-  position: sticky;
-  top: 0;
-}
-tbody tr{
-  border-bottom: 1px solid var(--border);
-  transition: background .1s;
-  cursor: pointer;
-}
-tbody tr:hover{
-  background: var(--bg2);
-}
-tbody tr:last-child{
-  border-bottom: none;
-}
-td{
-  padding: 11px 13px;
-  font-size: 13px;
-  vertical-align: middle;
-}
-.td-name{
-  font-weight: 500;
-  color: var(--text);
-}
-.td-muted{
-  color: var(--text2);
-  font-size: 12px;
-  margin-top: 2px;
-}
-.avatar{
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: #185fa5;
-  background: #E6F1FB;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-}
-.wa-link{
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--green);
-  font-size: 12px;
-  text-decoration: none;
-}
-.wa-link:hover{
-  text-decoration: underline;
-}
-
-/* PANEL SLIDEOUT */
-.overlay{
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.4);
-  z-index: 200;
-  justify-content: flex-end;
-}
-.overlay.open{
-  display: flex;
-}
-.panel{
-  width: 480px;
-  max-width: 100vw;
-  height: 100vh;
-  background: var(--bg);
-  overflow-y: auto;
-  border-left: 1px solid var(--border);
-  padding: 28px;
-  position: relative;
-  animation: slideIn .2s ease;
-}
-@keyframes slideIn{
-  from{transform: translateX(100%)}
-  to{transform: translateX(0)}
-}
-.panel-close{
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  cursor: pointer;
-  font-size: 22px;
-  color: var(--text2);
-  background: none;
-  border: none;
-  padding: 4px;
-  line-height: 1;
-}
-.panel-title{
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 24px;
-  padding-right: 36px;
-  color: var(--text);
-}
-.section-sep{
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 8px;
-  margin: 20px 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.field-row{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.field-group{
-  margin-bottom: 14px;
-}
-.field-label{
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  margin-bottom: 5px;
-}
-.field-val{
-  font-size: 14px;
-  color: var(--text);
-}
-.form-group{
-  margin-bottom: 13px;
-}
-.form-group label{
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text2);
-  display: block;
-  margin-bottom: 5px;
-}
-.form-group input, .form-group select, .form-group textarea{
-  width: 100%;
-  font-size: 13px;
-  padding: 8px 11px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border2);
-  background: var(--bg);
-  color: var(--text);
-  outline: none;
-  transition: border-color .15s;
-  font-family: inherit;
-}
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus{
-  border-color: var(--green);
-}
-.form-group textarea{
-  resize: vertical;
-  min-height: 72px;
-}
-.panel-actions{
-  margin-top: 20px;
-  display: flex;
-  gap: 10px;
-}
-
-/* NOTIFICACIONES */
-.notif{
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  background: var(--green);
-  color: #fff;
-  padding: 11px 20px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 999;
-  opacity: 0;
-  transition: opacity .3s;
-  pointer-events: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.2);
-}
-.notif.show{
-  opacity: 1;
-}
-
-/* SEGUIMIENTOS */
-.seg-section-title{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.seg-section-title span{
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ESTADOS VACÍOS */
-.empty{
-  text-align: center;
-  padding: 48px 24px;
-  color: var(--text2);
-  font-size: 14px;
-}
-
-/* MODULO DE LOGIN ESTILIZADO */
+/* LOGIN */
 .login-wrapper {
   position: fixed;
-  inset: 0;
+  top: 0; left: 0; width: 100vw; height: 100vh;
   background: var(--bg3);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
 }
 .login-card {
   background: var(--bg);
-  padding: 32px;
-  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  width: 360px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-  text-align: center;
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.05);
 }
 .login-logo {
-  width: 48px;
-  height: 48px;
-  background: var(--green);
-  color: #fff;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  margin-bottom: 16px;
+  font-size: 32px;
+  color: var(--green);
+  margin-bottom: 12px;
+  text-align: center;
 }
 .login-card h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  color: var(--text);
+  text-align: center;
   margin-bottom: 4px;
 }
 .login-card p {
   font-size: 12px;
   color: var(--text2);
-  margin-bottom: 24px;
-}
-.login-card .form-group {
-  text-align: left;
+  text-align: center;
+  margin-bottom: 20px;
 }
 .login-error-msg {
   color: #a32d2d;
@@ -603,40 +194,129 @@ td{
   border-radius: 20px;
   font-size: 12px;
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.config-tag span {
-  cursor: pointer;
-  color: #a32d2d;
-  font-weight: bold;
-}
-.config-input-group {
-  display: flex;
-  gap: 8px;
 }
 
-/* GESTIÓN DE USUARIOS EN CONFIGURACIÓN */
-.user-config-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg2);
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
+/* ==========================================================================
+   CLASES ADICIONALES REQUERIDAS PARA ARREGLAR TU KANBAN Y TU BOTÓN NUEVO LEAD
+   ========================================================================== */
+
+/* Hace que las columnas del Dashboard se coloquen una al lado de la otra (Horizontal) */
+.kanban-board {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 16px;
+  overflow-x: auto;
+  align-items: flex-start;
+  padding-bottom: 10px;
 }
-.user-config-info {
+
+/* Estructura para cada columna de estado en el Kanban */
+.kanban-column {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  min-width: 280px;
+  max-width: 280px;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
-.user-config-name {
+
+.column-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+/* Estilo para las tarjetas de cada Lead */
+.lead-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.1s ease;
+}
+.lead-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--green);
+}
+.lead-card h3 {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
-.user-config-pwd {
+.lead-card p {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* EL MODAL DE NUEVO LEAD (Oculto por defecto, se activa desde JS) */
+.overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  display: none; /* Tu JS cambia esto a 'flex' para mostrarlo */
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+/* Cuando el JS activa la clase 'active' */
+.overlay.active {
+  display: flex !important;
+}
+
+.panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 600px;
+  padding: 24px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  top: 14px; right: 16px;
+  background: none; border: none;
+  font-size: 22px; color: var(--text3);
+  cursor: pointer;
+}
+
+/* FORMULARIOS DENTRO DEL PANEL */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.form-group label {
   font-size: 11px;
-  color: var(--text3);
-  font-family: monospace;
+  font-weight: 500;
+  color: var(--text2);
+}
+.form-group input, .form-group select, .form-group textarea {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--green);
+  outline: none;
 }

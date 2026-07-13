@@ -251,21 +251,51 @@ async function renderAdminUsersTable() {
 
 async function actualizarPasswordPrincipal() {
   const newPass = document.getElementById("cfg-main-pass").value.trim();
-  if (!newPass) return;
-  if (supabaseClient) {
-    try {
-      const { data: exist } = await supabaseClient.from('crm_config').select('*').eq('tipo', 'admin').eq('valor', 'Herbolaria');
-      if (exist && exist.length > 0) {
-        await supabaseClient.from('crm_config').update({ extra: newPass }).eq('valor', 'Herbolaria');
-      } else {
-        await supabaseClient.from('crm_config').insert([{ tipo: 'admin', valor: 'Herbolaria', extra: newPass }]);
-      }
-      AUTH_PASS = newPass;
-      document.getElementById("cfg-main-pass").value = "";
-      showToast("Contraseña principal actualizada.");
-    } catch (e) {
-      showToast("Error actualizando credencial: " + e.message);
+  if (!newPass) {
+    showToast("Por favor, ingresa una nueva contraseña.");
+    return;
+  }
+  
+  if (!supabaseClient) {
+    showToast("Error: No hay conexión con Supabase.");
+    return;
+  }
+
+  try {
+    // 1. Verificar si ya existe el registro del admin en la base de datos
+    const { data: exist, error: fetchError } = await supabaseClient
+      .from('crm_config')
+      .select('*')
+      .eq('tipo', 'admin')
+      .eq('valor', 'Herbolaria');
+
+    if (fetchError) throw fetchError;
+
+    // 2. Si existe, actualizamos; si no, lo insertamos
+    if (exist && exist.length > 0) {
+      const { error: updateError } = await supabaseClient
+        .from('crm_config')
+        .update({ extra: newPass })
+        .eq('tipo', 'admin')
+        .eq('valor', 'Herbolaria');
+        
+      if (updateError) throw updateError;
+    } else {
+      const { error: insertError } = await supabaseClient
+        .from('crm_config')
+        .insert([{ tipo: 'admin', valor: 'Herbolaria', extra: newPass }]);
+        
+      if (insertError) throw insertError;
     }
+
+    // 3. Actualizamos la variable global en memoria y limpiamos la interfaz
+    AUTH_PASS = newPass;
+    document.getElementById("cfg-main-pass").value = "";
+    showToast("🔒 Contraseña principal guardada en la base de datos.");
+
+  } catch (e) {
+    console.error("Error al guardar credencial:", e);
+    showToast("Error actualizando credencial: " + e.message);
   }
 }
 

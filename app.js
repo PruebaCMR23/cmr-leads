@@ -257,12 +257,12 @@ async function actualizarPasswordPrincipal() {
   }
   
   if (!supabaseClient) {
-    showToast("Error: No hay conexión con Supabase.");
+    showToast("Error: No hay conexión activa con Supabase.");
     return;
   }
 
   try {
-    // 1. Verificar si ya existe el registro del admin en la base de datos
+    // 1. Buscamos el registro existente del administrador raíz
     const { data: exist, error: fetchError } = await supabaseClient
       .from('crm_config')
       .select('*')
@@ -271,7 +271,7 @@ async function actualizarPasswordPrincipal() {
 
     if (fetchError) throw fetchError;
 
-    // 2. Si existe, actualizamos; si no, lo insertamos
+    // 2. Si existe, lo actualizamos de forma persistente. Si no, lo creamos.
     if (exist && exist.length > 0) {
       const { error: updateError } = await supabaseClient
         .from('crm_config')
@@ -288,13 +288,13 @@ async function actualizarPasswordPrincipal() {
       if (insertError) throw insertError;
     }
 
-    // 3. Actualizamos la variable global en memoria y limpiamos la interfaz
+    // 3. Modificamos la credencial en memoria global y limpiamos la caja de texto
     AUTH_PASS = newPass;
     document.getElementById("cfg-main-pass").value = "";
-    showToast("🔒 Contraseña principal guardada en la base de datos.");
+    showToast("🔒 Contraseña principal guardada en Supabase correctamente.");
 
   } catch (e) {
-    console.error("Error al guardar credencial:", e);
+    console.error("Error crítico actualizando credenciales:", e);
     showToast("Error actualizando credencial: " + e.message);
   }
 }

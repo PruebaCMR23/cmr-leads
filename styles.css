@@ -263,3 +263,9 @@ body {
 .login-error-msg { color: #a32d2d; font-size: 12px; margin-top: 12px; font-weight: 500; }
 .notif { position: fixed; bottom: 28px; right: 28px; background: var(--green); color: #fff; padding: 11px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500; z-index: 999; opacity: 0; transition: opacity .3s; pointer-events: none; box-shadow: 0 4px 16px rgba(0, 0, 0, .2); }
 .notif.show { opacity: 1; }
+
+/* REGLA DE ORO EXTRA PARA EVITAR EL COLAPSO VERTICAL DEL CONTENIDO PRINCIPAL */
+#main-app-content {
+  display: block;
+  width: 100%;
+}

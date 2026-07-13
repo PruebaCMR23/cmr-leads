@@ -10,7 +10,6 @@
 </head>
 <body>
 
-  <!-- PANTALLA DE ACCESO / LOGIN -->
   <div id="login-container" class="login-wrapper">
     <div class="login-card">
       <div class="login-logo"><i class="ti ti-lock"></i></div>
@@ -31,7 +30,6 @@
     </div>
   </div>
 
-  <!-- INTERFAZ PRINCIPAL DEL CRM -->
   <div id="main-layout" class="layout" style="display:none;">
     <div class="top-bar">
       <div class="top-title">
@@ -53,7 +51,6 @@
       <div class="tab" onclick="switchTab('config',this)"><i class="ti ti-settings"></i> Configuración</div>
     </div>
 
-    <!-- PESTAÑA 1: DASHBOARD -->
     <div id="tab-dashboard">
       <div class="metrics-row">
         <div class="metric-card">
@@ -139,7 +136,6 @@
       </div>
     </div>
 
-    <!-- PESTAÑA 2: TODOS LOS LEADS -->
     <div id="tab-leads" style="display:none;">
       <div class="filter-box">
         <input type="text" id="f-search" placeholder="🔍 Buscar nombre, empresa, teléfono..." oninput="filtrarTodosLosLeads()">
@@ -174,10 +170,8 @@
       </div>
     </div>
 
-    <!-- PESTAÑA 3: SEGUIMIENTO -->
     <div id="tab-seguimiento" style="display:none;">
       <div class="seg-container">
-        <!-- Vencidos -->
         <div class="seg-header text-red"><i class="ti ti-alert-triangle"></i> Vencidos (<span id="count-vencidos">0</span>)</div>
         <div class="table-container-box" style="margin-bottom:20px;">
           <div style="overflow-x:auto;">
@@ -192,7 +186,6 @@
           </div>
         </div>
 
-        <!-- Para Hoy -->
         <div class="seg-header text-orange"><i class="ti ti-calendar"></i> Para hoy (<span id="count-hoy">0</span>)</div>
         <div class="table-container-box" style="margin-bottom:20px;">
           <div style="overflow-x:auto;">
@@ -207,7 +200,6 @@
           </div>
         </div>
 
-        <!-- Próximos 14 Días -->
         <div class="seg-header text-blue"><i class="ti ti-calendar-time"></i> Próximos 14 días (<span id="count-futuros">0</span>)</div>
         <div class="table-container-box">
           <div style="overflow-x:auto;">
@@ -224,7 +216,6 @@
       </div>
     </div>
 
-    <!-- PESTAÑA 4: REPORTES -->
     <div id="tab-reportes" style="display:none;">
       <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
         <div class="metric-card">
@@ -261,10 +252,8 @@
       </div>
     </div>
 
-    <!-- PESTAÑA 5: CONFIGURACIÓN -->
     <div id="tab-config" style="display:none;">
       <div class="config-container">
-        <!-- Fuentes -->
         <div class="config-box">
           <h3><i class="ti ti-world"></i> Fuente *</h3>
           <div id="cfg-wrap-fuente" class="config-tags-wrapper"></div>
@@ -273,7 +262,6 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('fuente')">Agregar</button>
           </div>
         </div>
-        <!-- Productos -->
         <div class="config-box">
           <h3><i class="ti ti-package"></i> Producto de interés</h3>
           <div id="cfg-wrap-producto" class="config-tags-wrapper"></div>
@@ -282,7 +270,6 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('producto')">Agregar</button>
           </div>
         </div>
-        <!-- Presupuestos -->
         <div class="config-box">
           <h3><i class="ti ti-coin"></i> Presupuesto estimado</h3>
           <div id="cfg-wrap-presupuesto" class="config-tags-wrapper"></div>
@@ -291,7 +278,6 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('presupuesto')">Agregar</button>
           </div>
         </div>
-        <!-- Estado del Pipeline -->
         <div class="config-box">
           <h3><i class="ti ti-route"></i> Estado del Pipeline</h3>
           <div id="cfg-wrap-estado" class="config-tags-wrapper"></div>
@@ -300,7 +286,6 @@
             <button class="btn btn-primary" onclick="agregarConfigTag('estado')">Agregar</button>
           </div>
         </div>
-        <!-- Credenciales de Usuarios -->
         <div class="config-box">
           <h3><i class="ti ti-shield-lock"></i> Usuario y contraseña incluyendo el principal</h3>
           <div class="form-group" style="margin-top:10px;">
@@ -332,7 +317,6 @@
     </div>
   </div>
 
-  <!-- PANEL LATERAL FLOTANTE -->
   <div class="overlay" id="overlay" onclick="closePanel(event)">
     <div class="panel-lateral" id="panel">
       <div class="panel-header">
@@ -345,20 +329,20 @@
         <div class="form-group"><label>Empresa</label><input type="text" id="n-empresa" placeholder="Nombre del negocio"></div>
         <div class="form-group"><label>Teléfono / WhatsApp</label><input type="text" id="n-telefono" placeholder="10 dígitos numéricos"></div>
         <div class="form-group"><label>Correo Electrónico</label><input type="email" id="n-correo" placeholder="correo@ejemplo.com"></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div>
-          <div class="form-group"><label>Estado</label><input type="text" id="n-estado" placeholder="Estado"></div>
+        <div style="display:flex; gap:10px;">
+          <div class="form-group" style="flex:1;"><label>Ciudad</label><input type="text" id="n-ciudad" placeholder="Ciudad"></div>
+          <div class="form-group" style="flex:1;"><label>Estado</label><input type="text" id="n-estado" placeholder="Estado"></div>
         </div>
         <p class="section-divider-title" style="margin-top:20px;">INFORMACIÓN COMERCIAL</p>
         <div class="form-group"><label>Fuente del Lead *</label><select id="n-fuente"></select></div>
         <div class="form-group"><label>Producto de Interés *</label><select id="n-producto"></select></div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group"><label>Presupuesto Estimado</label><select id="n-presupuesto"></select></div>
-          <div class="form-group"><label>Asignar Responsable *</label><select id="n-responsable"></select></div>
+        <div style="display:flex; gap:10px;">
+          <div class="form-group" style="flex:1;"><label>Presupuesto Estimado</label><select id="n-presupuesto"></select></div>
+          <div class="form-group" style="flex:1;"><label>Asignar Responsable *</label><select id="n-responsable"></select></div>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group"><label>Prioridad</label><select id="n-prioridad"></select></div>
-          <div class="form-group"><label>Estado del Pipeline</label><select id="n-situacion"></select></div>
+        <div style="display:flex; gap:10px;">
+          <div class="form-group" style="flex:1;"><label>Prioridad</label><select id="n-prioridad"></select></div>
+          <div class="form-group" style="flex:1;"><label>Estado del Pipeline</label><select id="n-situacion"></select></div>
         </div>
         <div class="form-group" style="margin-top:10px;"><label>Próximo Seguimiento Agendado</label><input type="datetime-local" id="n-seg"></div>
         <div class="form-group" style="margin-top:10px;"><label>Notas y Bitácora de Seguimiento</label><textarea id="n-notas" rows="4" placeholder="Escribe aquí los detalles del primer contacto..."></textarea></div>
@@ -373,12 +357,9 @@
     </div>
   </div>
 
-<div id="notif-toast" class="notif"></div>
+  <div id="notif-toast" class="notif"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script src="app.js"></script>
-</body>
-</html>
 </body>
 </html>

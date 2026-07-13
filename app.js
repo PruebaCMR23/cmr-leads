@@ -100,7 +100,7 @@ async function fetchLeadsDesdeSupabase() {
     const { data, error } = await supabaseClient
       .from('crm_leads')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('fechacreacion', { ascending: false })
 
     if (error) throw error;
     LEADS = data || [];

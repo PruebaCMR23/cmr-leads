@@ -59,7 +59,7 @@ async function cargarConfiguracionDesdeSupabase() {
   }
 }
 
-// MANEJO DE LOGIN / ACCESO SIMPLE
+// MANEJO DE LOGIN / ACCESO SIMPLE CORREGIDO
 async function handleLogin() {
   const userIn = document.getElementById("login-user").value.trim();
   const passIn = document.getElementById("login-pass").value.trim();
@@ -76,12 +76,15 @@ async function handleLogin() {
 
   if (loginValido) {
     document.getElementById("login-container").style.display = "none";
-    document.getElementById("main-layout").style.display = "flex";
+    // CAMBIO CLAVE: Usar "block" en lugar de "flex" para evitar el colapso horizontal
+    document.getElementById("main-layout").style.display = "block"; 
     showToast("¡Acceso correcto! Cargando datos...");
     await fetchLeadsDesdeSupabase();
   } else {
-    errDiv.innerText = "Usuario o contraseña incorrectos.";
-    errDiv.style.display = "block";
+    if (errDiv) {
+      errDiv.innerText = "Usuario o contraseña incorrectos.";
+      errDiv.style.display = "block";
+    }
   }
 }
 
@@ -89,7 +92,7 @@ function handleLogout() {
   document.getElementById("login-user").value = "";
   document.getElementById("login-pass").value = "";
   document.getElementById("main-layout").style.display = "none";
-  document.getElementById("login-container").style.display = "flex";
+  document.getElementById("login-container").style.display = "flex"; // El login sí usa flex en tu CSS
   if(document.getElementById("login-error")) document.getElementById("login-error").style.display = "none";
 }
 

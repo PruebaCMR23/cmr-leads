@@ -2,9 +2,9 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
-let AUTH_USER = "Herbolaria";
-let AUTH_PASS = "Saludable*"; // Clave por defecto inicial
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Arreglos globales dinámicos que se sincronizan con Supabase
 let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
@@ -22,787 +22,765 @@ const PRIORIDADES = ['Alta', 'Media', 'Baja'];
 
 let LEADS = [];
 let currentLeadId = null;
-const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6'];
 
-// ─── PETICIONES API HTTP ──────────────────────────────────────────────────────
-async function supabaseRequest(endpoint, method = 'GET', body = null) {
-  const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
-  const headers = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": `Bearer ${SUPABASE_KEY}`,
-    "Content-Type": "application/json",
-    "Prefer": (method === 'POST' || method === 'PATCH') ? "return=representation" : ""
-  };
-  const config = { method, headers };
-  if (body) config.body = JSON.stringify(body);
+// ─── FUNCIÓN AUXILIAR DE VALIDACIÓN DE SEGURIDAD EXCLUSIVA ────────────────────
+function solicitarYValidarContrasena(accionTexto) {
+  const passwordIntroducido = prompt(`🔒 Ingrese la contraseña actual del CRM para autorizar la acción:\n"${accionTexto}"`);
+  
+  if (passwordIntroducido === null) return false; // El usuario canceló
 
-  try {
-    const res = await fetch(url, config);
-    if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
-    return res.status === 204 ? true : await res.json();
-  } catch (err) {
-    console.error(`Error Supabase [${endpoint}]:`, err);
-    return null;
-  }
-}
+  // Obtener las credenciales vigentes en tiempo real desde localStorage o memoria
+  const currentPass = localStorage.getItem('crm_current_pass') || "Saludable*";
 
-// ─── FUNCIÓN AUXILIAR DE VALIDACIÓN DE CONTRASEÑA ACTUAL ──────────────────────
-function validarPasswordMomento() {
-  const p = prompt("🔐 Para autorizar esta acción, ingresa tu CONTRASEÑA ACTUAL:");
-  if (p === null) return false; // Usuario canceló
-  if (p === AUTH_PASS) {
+  if (passwordIntroducido === currentPass) {
     return true;
   } else {
-    alert("❌ Contraseña incorrecta. Acción cancelada.");
+    alert("❌ Contraseña incorrecta. Acción cancelada y no autorizada.");
     return false;
   }
 }
 
-// ─── CARGA Y FLUJO GLOBAL DE CATÁLOGOS NUBE ───────────────────────────────────
-async function cargarConfiguracionesBase() {
-  document.getElementById('cfg-main-user').value = AUTH_USER;
+// ─── CARGA INICIAL DE CONFIGURACIONES DESDE SUPABASE ─────────────────────────
+async function fetchConfiguraciones() {
+  try {
+    // Inicializar contraseña local si no existe
+    if (!localStorage.getItem('crm_current_pass')) {
+      localStorage.setItem('crm_current_pass', "Saludable*");
+      localStorage.setItem('crm_current_user', "Herbolaria");
+    }
 
-  // Sincronizar contraseña maestra desde Supabase (si existe la cuenta principal guardada)
-  const aData = await supabaseRequest('config_admins?select=*');
-  ADMINS = aData || [];
-  
-  const principalDb = ADMINS.find(a => a.user.toLowerCase() === AUTH_USER.toLowerCase());
-  if (principalDb && principalDb.pass) {
-    AUTH_PASS = principalDb.pass;
+    const { data: dataCfg, error: errCfg } = await _supabase.from('crm_configuraciones').select('*');
+    if (errCfg) throw errCfg;
+
+    // Clasificar registros por tipo
+    FUENTES = dataCfg.filter(c => c.tipo === 'fuente').map(c => c.valor);
+    PRODUCTOS = dataCfg.filter(c => c.tipo === 'producto').map(c => c.valor);
+    PRESUPUESTOS = dataCfg.filter(c => c.tipo === 'presupuesto').map(c => c.valor);
+    ESTADOS_PIPELINE = dataCfg.filter(c => c.tipo === 'estado').map(c => c.valor);
+
+    // Si la base está vacía o faltan configuraciones críticas, cargar mocks por defecto
+    if(FUENTES.length === 0) {
+      FUENTES = ['Facebook Ads', 'Instagram Ads', 'Google Ads', 'WhatsApp', 'Referido', 'Página Web', 'TikTok'];
+      await guardarMultiplesConfiguraciones('fuente', FUENTES);
+    }
+    if(PRODUCTOS.length === 0) {
+      PRODUCTOS = ['Cápsulas Herbolarias', 'Tés Medicinales', 'Extractos Líquidos', 'Suplementos Vitamínicos'];
+      await guardarMultiplesConfiguraciones('producto', PRODUCTOS);
+    }
+    if(PRESUPUESTOS.length === 0) {
+      PRESUPUESTOS = ['< $5,000', '$5,000 - $15,000', '$15,000 - $50,000', '> $50,000'];
+      await guardarMultiplesConfiguraciones('presupuesto', PRESUPUESTOS);
+    }
+    if(ESTADOS_PIPELINE.length === 0) {
+      ESTADOS_PIPELINE = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
+      await guardarMultiplesConfiguraciones('estado', ESTADOS_PIPELINE);
+    }
+
+    // Cargar cuentas adicionales de administradores desde Supabase
+    const { data: dataAdmins, error: errAdmins } = await _supabase.from('crm_usuarios_admin').select('*');
+    if (!errAdmins && dataAdmins) {
+      ADMINS = dataAdmins;
+    }
+
+  } catch (error) {
+    console.error("Error cargando configuraciones iniciales:", error);
   }
-  document.getElementById('cfg-main-pass').value = AUTH_PASS;
-
-  const fData = await supabaseRequest('config_fuentes?select=*');
-  FUENTES = fData ? fData.map(x => x.nombre) : [];
-  
-  const pData = await supabaseRequest('config_productos?select=*');
-  PRODUCTOS = pData ? pData.map(x => x.nombre) : [];
-
-  const prData = await supabaseRequest('config_presupuestos?select=*');
-  PRESUPUESTOS = prData ? prData.map(x => x.nombre) : [];
-
-  const estData = await supabaseRequest('config_responsables?select=*');
-  ESTADOS_PIPELINE = estData ? estData.map(x => x.nombre) : [];
-
-  actualizarSelectsFiltrosTodosLeads();
-  renderConfiguracionPanel();
 }
 
-async function fetchLeads() {
-  const data = await supabaseRequest('crm_leads?select=*&order=id.desc');
-  LEADS = data || [];
-  renderDashboard();
-  renderTodosLosLeads(LEADS);
-  renderSeguimientoColumnas();
+async function guardarMultiplesConfiguraciones(tipo, arrayValores) {
+  const rows = arrayValores.map(v => ({ tipo: tipo, valor: v }));
+  await _supabase.from('crm_configuraciones').insert(rows);
 }
 
-async function inicializarSistema() {
-  await cargarConfiguracionesBase();
-  await fetchLeads();
-  verificarRecordatoriosHoy(LEADS);
-}
+// ─── SISTEMA DE AUTENTICACIÓN Y ACCESO ────────────────────────────────────────
+function handleLogin() {
+  const userVal = document.getElementById('login-user').value.trim();
+  const passVal = document.getElementById('login-pass').value;
+  const errorMsg = document.getElementById('login-error');
 
-// ─── LOGIN & ACCESO DE USUARIOS ───────────────────────────────────────────────
-async function handleLogin() {
-  const uVal = document.getElementById('login-user').value.trim();
-  const pVal = document.getElementById('login-pass').value.trim();
-  const errorDiv = document.getElementById('login-error');
+  const masterUser = localStorage.getItem('crm_current_user') || "Herbolaria";
+  const masterPass = localStorage.getItem('crm_current_pass') || "Saludable*";
 
-  // Primero jalar los admins actualizados para validar contra datos en tiempo real
-  const aData = await supabaseRequest('config_admins?select=*');
-  if (aData) ADMINS = aData;
-  
-  const principalDb = ADMINS.find(a => a.user.toLowerCase() === AUTH_USER.toLowerCase());
-  if (principalDb && principalDb.pass) {
-    AUTH_PASS = principalDb.pass;
-  }
+  // Verificar cuenta maestra o cuentas adicionales cargadas
+  const matchAdmin = ADMINS.find(a => a.usuario.toLowerCase() === userVal.toLowerCase() && a.contrasena === passVal);
 
-  let esValido = false;
-  if (uVal.toLowerCase() === AUTH_USER.toLowerCase() && pVal === AUTH_PASS) {
-    esValido = true;
-  } else {
-    const secundario = ADMINS.find(a => a.user.toLowerCase() === uVal.toLowerCase() && a.pass === pVal);
-    if (secundario) esValido = true;
-  }
-
-  if (esValido) {
-    errorDiv.style.display = 'none';
+  if ((userVal.toLowerCase() === masterUser.toLowerCase() && passVal === masterPass) || matchAdmin) {
+    if(errorMsg) errorMsg.style.display = 'none';
     sessionStorage.setItem('crm_logged_in', 'true');
+    sessionStorage.setItem('crm_user_activo', userVal);
+    
     document.getElementById('login-container').style.display = 'none';
     document.getElementById('main-layout').style.display = 'block';
-    inicializarSistema();
+    
+    inicializarCRM();
   } else {
-    errorDiv.textContent = "⚠️ Usuario o contraseña inválidos.";
-    errorDiv.style.display = 'block';
+    if(errorMsg) errorMsg.style.display = 'block';
   }
 }
 
 function handleLogout() {
   sessionStorage.removeItem('crm_logged_in');
-  window.location.reload();
+  sessionStorage.removeItem('crm_user_activo');
+  document.getElementById('main-layout').style.display = 'none';
+  document.getElementById('login-container').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
 }
 
-// ─── PESTAÑA: TODOS LOS LEADS (FILTROS Y TABLA COMPLETA) ──────────────────────
-function actualizarSelectsFiltrosTodosLeads() {
-  inyectarOpcionesFiltro('f-fuente', FUENTES, 'Todas las fuentes');
-  inyectarOpcionesFiltro('f-estado', ESTADOS_PIPELINE, 'Todos los estados');
-  inyectarOpcionesFiltro('f-responsable', RESPONSABLES, 'Todos los responsables');
-  inyectarOpcionesFiltro('f-prioridad', PRIORIDADES, 'Todas las prioridades');
-}
+// ─── CONTROLADOR GLOBAL DE PESTAÑAS DEL SISTEMA ──────────────────────────────
+function switchTab(tabId, element) {
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => t.classList.remove('active'));
+  element.classList.add('active');
 
-function inyectarOpcionesFiltro(elementId, array, defaultText) {
-  const select = document.getElementById(elementId);
-  if (!select) return;
-  let html = `<option value="">${defaultText}</option>`;
-  array.forEach(v => { html += `<option value="${v}">${v}</option>`; });
-  select.innerHTML = html;
-}
+  const contents = ['tab-dashboard', 'tab-leads', 'tab-seguimiento', 'tab-reportes', 'tab-config'];
+  contents.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
 
-function renderTodosLosLeads(leadsArr) {
-  const container = document.getElementById('tab-leads');
-  if (!container) return;
-
-  const tableBody = document.querySelector('.crm-table tbody');
-  if (!tableBody) return;
-
-  if (leadsArr.length === 0) {
-    tableBody.innerHTML = `<tr><td colspan="11" class="no-data-row">No se encontraron prospectos</td></tr>`;
-    return;
+  const activeContent = document.getElementById(`tab-${tabId}`);
+  if(activeContent) {
+    activeContent.style.display = 'block';
+    if (tabId === 'dashboard') renderDashboard();
+    if (tabId === 'leads') renderLeadsTable();
+    if (tabId === 'seguimiento') renderSeguimiento();
+    if (tabId === 'reportes') renderReportes();
+    if (tabId === 'config') renderConfiguracionTab();
   }
-
-  let html = "";
-  leadsArr.forEach(l => {
-    const fStr = l.created_at ? new Date(l.created_at).toLocaleDateString('es-MX') : '—';
-    const proxStr = l.proximoseg ? new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'}) : '—';
-    const totalMonto = l.monto_potencial ? `$${Number(l.monto_potencial).toLocaleString('es-MX')}` : '—';
-    
-    html += `
-      <tr onclick="openEditLead(${l.id})" style="cursor:pointer;">
-        <td><strong>#${l.id}</strong></td>
-        <td>${fStr}</td>
-        <td>
-          <div style="font-weight:600; color:var(--text);">${l.nombre}</div>
-          <div style="font-size:11px; color:var(--text2);">${l.empresa || 'Particular'}</div>
-        </td>
-        <td>
-          <div style="font-size:12px;"><i class="ti ti-phone" style="font-size:11px;"></i> ${l.telefono || '—'}</div>
-          <div style="font-size:11px; color:var(--text2);"><i class="ti ti-mail" style="font-size:11px;"></i> ${l.correo || '—'}</div>
-        </td>
-        <td><span class="badge badge-secondary">${l.fuente || 'Desconocida'}</span></td>
-        <td><span style="font-size:12px;">${l.producto || '—'}</span></td>
-        <td><span style="font-size:12px; font-weight:500;">${l.responsable ? l.responsable.split(' - ')[0] : '—'}</span></td>
-        <td><span class="status-pill status-${obtenerClaseEstado(l.estado)}">${l.estado || 'Nuevo'}</span></td>
-        <td><span class="priority-indicator priority-${obtenerClasePrioridad(l.prioridad)}">${l.prioridad || 'Media'}</span></td>
-        <td style="font-size:12px; font-weight:500; color:var(--green-dk);">${proxStr}</td>
-        <td><strong>${totalMonto}</strong></td>
-      </tr>
-    `;
-  });
-  tableBody.innerHTML = html;
 }
 
-function filtrarTodosLosLeads() {
-  const q = document.getElementById('f-search').value.toLowerCase();
-  const f = document.getElementById('f-fuente').value;
-  const e = document.getElementById('f-estado').value;
-  const r = document.getElementById('f-responsable').value;
-  const p = document.getElementById('f-prioridad').value;
-
-  const filtrados = LEADS.filter(l => {
-    const matchQ = !q || 
-      (l.nombre && l.nombre.toLowerCase().includes(q)) ||
-      (l.empresa && l.empresa.toLowerCase().includes(q)) ||
-      (l.telefono && l.telefono.includes(q)) ||
-      (l.correo && l.correo.toLowerCase().includes(q)) ||
-      (l.ciudad && l.ciudad.toLowerCase().includes(q));
-
-    const matchF = !f || l.fuente === f;
-    const matchE = !e || l.estado === e;
-    const matchR = !r || l.responsable === r;
-    const matchP = !p || l.prioridad === p;
-
-    return matchQ && matchF && matchE && matchR && matchP;
-  });
-
-  renderTodosLosLeads(filtrados);
+// ─── INICIALIZACIÓN GENERAL DE DATOS A SUPABASE ────────────────────────────────
+async function inicializarCRM() {
+  await fetchConfiguraciones();
+  await cargarLeadsSupabase();
+  renderDashboard();
+  llenarSelectsFormularioLeads();
+  verificarSeguimientosHoy(LEADS);
 }
 
-// ─── ACCIONES DEL FORMULARIO DE LEADS (AGREGAR / MODIFICAR / ELIMINAR) ────────
+async function cargarLeadsSupabase() {
+  try {
+    const { data, error } = await _supabase.from('crm_leads').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    LEADS = data || [];
+  } catch (err) {
+    console.error("Error al descargar leads de Supabase:", err);
+  }
+}
+
+// ─── LLENADO DINÁMICO DE SELECTORES EN PANEL ───────────────────────────────────
+function llenarSelectsFormularioLeads() {
+  llenarSelectEspecifico('n-fuente', FUENTES);
+  llenarSelectEspecifico('n-producto', PRODUCTOS);
+  llenarSelectEspecifico('n-presupuesto', PRESUPUESTOS);
+  llenarSelectEspecifico('n-responsable', RESPONSABLES);
+  llenarSelectEspecifico('n-prioridad', PRIORIDADES);
+  llenarSelectEspecifico('n-situacion', ESTADOS_PIPELINE);
+}
+
+function llenarSelectEspecifico(idElemento, arrayDatos) {
+  const select = document.getElementById(idElemento);
+  if(!select) return;
+  select.innerHTML = '';
+  arrayDatos.forEach(val => {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = val;
+    select.appendChild(opt);
+  });
+}
+
+// ─── OPERACIONES Y APARTADO DE LEADS (GUARDAR / EDITAR) ────────────────────────
 function openNewLead() {
+  currentLeadId = null;
+  document.getElementById('panel-title').innerHTML = '<i class="ti ti-user-plus"></i> Nuevo Lead';
+  
+  // Limpiar inputs
+  document.getElementById('n-nombre').value = '';
+  document.getElementById('n-empresa').value = '';
+  document.getElementById('n-telefono').value = '';
+  document.getElementById('n-correo').value = '';
+  document.getElementById('n-ciudad').value = '';
+  document.getElementById('n-estadorep').value = '';
+  document.getElementById('n-seg').value = '';
+  document.getElementById('n-notas').value = '';
+  
+  llenarSelectsFormularioLeads();
+  document.getElementById('btn-delete-lead').style.display = 'none';
   togglePanel(true);
 }
 
-function openEditLead(id) {
-  const lead = LEADS.find(x => x.id === id);
+function editLead(id) {
+  const lead = LEADS.find(l => l.id == id);
   if (!lead) return;
-  togglePanel(true, lead);
-}
 
-function togglePanel(show, lead = null) {
-  const overlay = document.getElementById('overlay');
-  const panel = document.getElementById('panel');
-  if (!overlay || !panel) return;
+  currentLeadId = lead.id;
+  document.getElementById('panel-title').innerHTML = '<i class="ti ti-edit"></i> Editar Lead';
 
-  if (show) {
-    llenarSelectsFormularioProspectos();
-    if (lead) {
-      currentLeadId = lead.id;
-      document.getElementById('panel-title').innerHTML = `<i class="ti ti-edit"></i> Editar Lead #${lead.id}`;
-      document.getElementById('btn-delete-lead').style.display = 'block';
-      
-      document.getElementById('n-nombre').value = lead.nombre || '';
-      document.getElementById('n-empresa').value = lead.empresa || '';
-      document.getElementById('n-telefono').value = lead.telefono || '';
-      document.getElementById('n-correo').value = lead.correo || '';
-      document.getElementById('n-ciudad').value = lead.ciudad || '';
-      document.getElementById('n-estado-rep').value = lead.estado_rep || '';
-      document.getElementById('n-fuente').value = lead.fuente || '';
-      document.getElementById('n-producto').value = lead.producto || '';
-      document.getElementById('n-presupuesto').value = lead.presupuesto || '';
-      document.getElementById('n-responsable').value = lead.responsable || '';
-      document.getElementById('n-prioridad').value = lead.prioridad || 'Media';
-      document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
-      document.getElementById('n-seg').value = lead.proximoseg ? lead.proximoseg.slice(0, 16) : '';
-      document.getElementById('n-notas').value = lead.notas || '';
-    } else {
-      currentLeadId = null;
-      document.getElementById('panel-title').innerHTML = `<i class="ti ti-user-plus"></i> Nuevo Lead`;
-      document.getElementById('btn-delete-lead').style.display = 'none';
-      limpiarCamposFormulario();
-    }
-    overlay.classList.add('active');
-    panel.classList.add('active');
+  document.getElementById('n-nombre').value = lead.nombre || '';
+  document.getElementById('n-empresa').value = lead.empresa || '';
+  document.getElementById('n-telefono').value = lead.telefono || '';
+  document.getElementById('n-correo').value = lead.correo || '';
+  document.getElementById('n-ciudad').value = lead.ciudad || '';
+  document.getElementById('n-estadorep').value = lead.estado_rep || '';
+  document.getElementById('n-notas').value = lead.notas || '';
+  
+  if(lead.proximoseg) {
+    document.getElementById('n-seg').value = lead.proximoseg.substring(0, 16);
   } else {
-    overlay.classList.remove('active');
-    panel.classList.remove('active');
-    currentLeadId = null;
+    document.getElementById('n-seg').value = '';
   }
-}
 
-function closePanel(e) {
-  if (e && e.target.id === 'overlay') togglePanel(false);
-}
+  llenarSelectsFormularioLeads();
+  
+  document.getElementById('n-fuente').value = lead.fuente;
+  document.getElementById('n-producto').value = lead.producto;
+  document.getElementById('n-presupuesto').value = lead.presupuesto;
+  document.getElementById('n-responsable').value = lead.responsable;
+  document.getElementById('n-prioridad').value = lead.prioridad;
+  document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
 
-function limpiarCamposFormulario() {
-  ['n-nombre', 'n-empresa', 'n-telefono', 'n-correo', 'n-ciudad', 'n-estado-rep', 'n-seg', 'n-notas'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-}
-
-function llenarSelectsFormularioProspectos() {
-  inyectarOpcionesHtml('n-fuente', FUENTES);
-  inyectarOpcionesHtml('n-producto', PRODUCTOS);
-  inyectarOpcionesHtml('n-presupuesto', PRESUPUESTOS);
-  inyectarOpcionesHtml('n-responsable', RESPONSABLES);
-  inyectarOpcionesHtml('n-prioridad', PRIORIDADES);
-  inyectarOpcionesHtml('n-situacion', ESTADOS_PIPELINE);
-}
-
-function inyectarOpcionesHtml(elementId, array) {
-  const select = document.getElementById(elementId);
-  if (!select) return;
-  let html = "";
-  array.forEach(v => { html += `<option value="${v}">${v}</option>`; });
-  select.innerHTML = html;
+  document.getElementById('btn-delete-lead').style.display = 'block';
+  togglePanel(true);
 }
 
 async function guardarLeadFormulario() {
   const nombre = document.getElementById('n-nombre').value.trim();
-  if (!nombre) {
-    alert("⚠️ El nombre del prospecto es obligatorio.");
+  const telefono = document.getElementById('n-telefono').value.trim();
+
+  if (!nombre || !telefono) {
+    alert("⚠️ Los campos Nombre y Teléfono son completamente obligatorios.");
     return;
   }
 
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
+  // ACCIÓN CRÍTICA: Solicitar validación de contraseña de seguridad
+  const accion = currentLeadId ? "Modificar y guardar cambios del Lead existente" : "Crear y registrar un nuevo Lead en el sistema";
+  if (!solicitarYValidarContrasena(accion)) return;
 
-  const rawMonto = document.getElementById('n-presupuesto').value;
-  const numericMonto = extraerNumeroMonto(rawMonto);
-
-  const payload = {
-    nombre,
+  const leadData = {
+    nombre: nombre,
     empresa: document.getElementById('n-empresa').value.trim(),
-    telefono: document.getElementById('n-telefono').value.trim(),
+    telefono: telefono,
     correo: document.getElementById('n-correo').value.trim(),
     ciudad: document.getElementById('n-ciudad').value.trim(),
-    estado_rep: document.getElementById('n-estado-rep').value.trim(),
+    estado_rep: document.getElementById('n-estadorep').value.trim(),
     fuente: document.getElementById('n-fuente').value,
     producto: document.getElementById('n-producto').value,
-    presupuesto: rawMonto,
-    monto_potencial: numericMonto,
+    presupuesto: document.getElementById('n-presupuesto').value,
     responsable: document.getElementById('n-responsable').value,
     prioridad: document.getElementById('n-prioridad').value,
     estado: document.getElementById('n-situacion').value,
     proximoseg: document.getElementById('n-seg').value || null,
-    notas: document.getElementById('n-notas').value.trim(),
-    updated_at: new Date().toISOString()
+    notas: document.getElementById('n-notas').value.trim()
   };
 
-  let res = null;
-  if (currentLeadId) {
-    // Modo Edición
-    res = await supabaseRequest(`crm_leads?id=eq.${currentLeadId}`, 'PATCH', payload);
-    if (res) {
-      alert("✅ ¡Éxito! El Lead se modificó correctamente.");
-      notify("🔄 Lead actualizado correctamente.");
+  try {
+    if (currentLeadId) {
+      // Actualizar registro en Supabase
+      const { error } = await _supabase.from('crm_leads').update(leadData).eq('id', currentLeadId);
+      if (error) throw error;
+      notify("✅ Lead modificado y guardado correctamente");
+    } else {
+      // Crear registro en Supabase
+      const { error } = await _supabase.from('crm_leads').insert([leadData]);
+      if (error) throw error;
+      notify("✅ ¡Nuevo Lead registrado con éxito!");
     }
-  } else {
-    // Modo Nuevo Lead
-    payload.created_at = new Date().toISOString();
-    res = await supabaseRequest('crm_leads', 'POST', payload);
-    if (res) {
-      alert("✅ ¡Éxito! El nuevo Lead se agregó correctamente.");
-      notify("➕ Nuevo Lead registrado.");
-    }
-  }
 
-  if (res) {
     togglePanel(false);
-    await fetchLeads();
-  } else {
-    alert("❌ Error en la comunicación con la base de datos.");
+    await cargarLeadsSupabase();
+    
+    // Forzar redibujado de la pestaña actual en la que esté el usuario
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) {
+      if (activeTab.textContent.includes('Dashboard')) renderDashboard();
+      if (activeTab.textContent.includes('Todos los Leads')) renderLeadsTable();
+      if (activeTab.textContent.includes('Seguimiento')) renderSeguimiento();
+      if (activeTab.textContent.includes('Reportes')) renderReportes();
+    }
+
+  } catch (err) {
+    console.error("Error al guardar en Supabase:", err);
+    alert("❌ Error interno al guardar los datos en Supabase.");
   }
 }
 
 async function eliminarLeadActual() {
   if (!currentLeadId) return;
+  
+  if (!solicitarYValidarContrasena("Eliminar permanentemente este Lead del CRM")) return;
 
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
+  try {
+    const { error } = await _supabase.from('crm_leads').delete().eq('id', currentLeadId);
+    if (error) throw error;
 
-  const res = await supabaseRequest(`crm_leads?id=eq.${currentLeadId}`, 'DELETE');
-  if (res) {
-    alert("✅ ¡Éxito! El prospecto fue eliminado correctamente.");
-    notify("🗑 Registro eliminado.");
+    notify("🗑 Lead eliminado permanentemente.");
     togglePanel(false);
-    await fetchLeads();
-  } else {
-    alert("❌ Error al intentar eliminar el registro.");
-  }
-}
-
-// ─── PESTAÑA: SEGUIMIENTO EN COLUMNAS (KANBAN KANBANIZADO) ─────────────────────
-function renderSeguimientoColumnas() {
-  const container = document.getElementById('tab-seguimiento');
-  if (!container) return;
-
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-  const manana = new Date(hoy);
-  manana.setDate(manana.getDate() + 1);
-  const limiteFuturo = new Date(hoy);
-  limiteFuturo.setDate(limiteFuturo.getDate() + 30);
-
-  let vencidosArr = [], hoyArr = [], futurosArr = [];
-
-  LEADS.forEach(l => {
-    if (!l.proximoseg || ['Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'].includes(l.estado)) return;
-    const f = new Date(l.proximoseg);
-    if (f < hoy) {
-      vencidosArr.push(l);
-    } else if (f >= hoy && f < manana) {
-      hoyArr.push(l);
-    } else if (f >= manana && f < limiteFuturo) {
-      futurosArr.push(l);
+    await cargarLeadsSupabase();
+    
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) {
+      if (activeTab.textContent.includes('Dashboard')) renderDashboard();
+      if (activeTab.textContent.includes('Todos los Leads')) renderLeadsTable();
+      if (activeTab.textContent.includes('Seguimiento')) renderSeguimiento();
     }
-  });
-
-  document.getElementById('count-vencidos').textContent = vencidosArr.length;
-  document.getElementById('count-hoy').textContent = hoyArr.length;
-  document.getElementById('count-futuros').textContent = futurosArr.length;
-
-  const tVencidos = document.getElementById('seg-vencidos-list');
-  const tHoy = document.getElementById('seg-hoy-list');
-  const tFuturos = document.getElementById('seg-futuros-list');
-
-  inyectarFilasSeguimiento(tVencidos, vencidosArr);
-  inyectarFilasSeguimiento(tHoy, hoyArr);
-  inyectarFilasSeguimiento(tFuturos, futurosArr);
-}
-
-function inyectarFilasSeguimiento(boxElement, leadsList) {
-  if (!boxElement) return;
-  if (leadsList.length === 0) {
-    boxElement.innerHTML = `<div class="empty-column-msg">Sin seguimientos</div>`;
-    return;
+  } catch (err) {
+    console.error(err);
+    alert("❌ No se pudo eliminar el registro.");
   }
-
-  let html = "";
-  leadsList.forEach(l => {
-    const fStr = l.proximoseg ? new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'}) : '';
-    html += `
-      <div class="seg-card priority-border-${obtenerClasePrioridad(l.prioridad)}" onclick="openEditLead(${l.id})">
-        <div class="seg-card-header">
-          <strong>#${l.id} — ${l.nombre}</strong>
-          <span class="status-pill status-${obtenerClaseEstado(l.estado)}" style="font-size:10px; padding:2px 6px;">${l.estado}</span>
-        </div>
-        <div class="seg-card-body">
-          <div><i class="ti ti-phone"></i> ${l.telefono || '—'}</div>
-          <div class="seg-card-date"><i class="ti ti-calendar-time"></i> ${fStr}</div>
-        </div>
-      </div>
-    `;
-  });
-  boxElement.innerHTML = html;
 }
 
-// ─── PESTAÑA: DASHBOARD & REPORTES (MÉTRICAS Y GRÁFICOS) ─────────────────────
+// ─── RENDERIZADO DEL DASHBOARD (CONSERVA TU MAQUETACIÓN EXACTA) ─────────────
 function renderDashboard() {
+  const container = document.getElementById('tab-dashboard');
+  if(!container) return;
+
+  // Estadísticas operativas rápidas
   const total = LEADS.length;
   const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado').length;
-  const tasa = total > 0 ? Math.round((ganados / total) * 100) : 0;
+  const perdidos = LEADS.filter(l => l.estado === 'Cerrado Perdido').length;
+  const enProceso = total - ganados - perdidos;
 
-  let montoCerradoTotal = 0;
-  let pipelinePotencialTotal = 0;
+  container.innerHTML = `
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-val">${total}</div>
+        <div class="metric-label">Leads Totales</div>
+      </div>
+      <div class="metric-card" style="border-left: 4px solid #1D9E75;">
+        <div class="metric-val">${enProceso}</div>
+        <div class="metric-label">En Negociación / Activos</div>
+      </div>
+      <div class="metric-card" style="border-left: 4px solid #2e7d32;">
+        <div class="metric-val">${ganados}</div>
+        <div class="metric-label">Ventas Exitosas</div>
+      </div>
+      <div class="metric-card" style="border-left: 4px solid #c62828;">
+        <div class="metric-val">${perdidos}</div>
+        <div class="metric-label">Leads Perdidos</div>
+      </div>
+    </div>
 
-  LEADS.forEach(l => {
-    const valor = Number(l.monto_potencial) || extraerNumeroMonto(l.presupuesto);
-    if (l.estado === 'Cerrado Ganado') {
-      montoCerradoTotal += valor;
-    } else if (!['Cerrado Perdido', 'Abandonado'].includes(l.estado)) {
-      pipelinePotencialTotal += valor;
-    }
+    <div style="margin-top:24px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+      <h3 style="margin-bottom:16px; font-size:15px; font-weight:600;"><i class="ti ti-alert-circle"></i> Leads Recientes Añadidos</h3>
+      <div style="overflow-x:auto;">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Fuente</th>
+              <th>Producto de Interés</th>
+              <th>Responsable</th>
+              <th>Prioridad</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${LEADS.slice(0, 5).map(l => `
+              <tr>
+                <td><strong>${l.nombre}</strong><br><small style="color:var(--text2)">${l.telefono}</small></td>
+                <td><span class="badge">${l.fuente}</span></td>
+                <td>${l.producto}</td>
+                <td><small>${l.responsable}</small></td>
+                <td><span class="prio-${l.prioridad ? l.prioridad.toLowerCase() : 'baja'}">${l.prioridad || 'Baja'}</span></td>
+                <td><span class="badge" style="background:var(--bg3); color:var(--text);">${l.estado || 'Nuevo'}</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px" onclick="editLead(${l.id})"><i class="ti ti-edit"></i> Ver</button></td>
+              </tr>
+            `).join('')}
+            ${LEADS.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:20px;">No hay leads registrados aún.</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── PESTAÑA DE TODOS LOS LEADS ────────────────────────────────────────────────
+function renderLeadsTable() {
+  const container = document.getElementById('tab-leads');
+  if(!container) return;
+
+  container.innerHTML = `
+    <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:15px; font-weight:600;"><i class="ti ti-list"></i> Base de Datos General</h3>
+        <span style="color:var(--text2); font-size:13px;">Total: ${LEADS.length} registros</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Nombre Completo</th>
+              <th>Ubicación</th>
+              <th>Fuente</th>
+              <th>Producto</th>
+              <th>Presupuesto</th>
+              <th>Responsable</th>
+              <th>Estado Pipeline</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${LEADS.map(l => `
+              <tr>
+                <td><strong>${l.nombre}</strong><br><small style="color:var(--text2)">${l.telefono} | ${l.correo || 'Sin correo'}</small></td>
+                <td><small>${l.ciudad || ''}, ${l.estado_rep || ''}</small></td>
+                <td><span class="badge">${l.fuente}</span></td>
+                <td>${l.producto}</td>
+                <td><small>${l.presupuesto}</small></td>
+                <td><small>${l.responsable}</small></td>
+                <td><span class="badge" style="background:var(--green); color:#fff;">${l.estado || 'Nuevo'}</span></td>
+                <td><button class="btn btn-primary" style="padding:4px 8px; font-size:12px" onclick="editLead(${l.id})"><i class="ti ti-edit"></i> Editar</button></td>
+              </tr>
+            `).join('')}
+            ${LEADS.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Ningún lead registrado en el sistema.</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── PESTAÑA DE SEGUIMIENTO (ORGANIZADO) ───────────────────────────────────────
+function renderSeguimiento() {
+  const container = document.getElementById('tab-seguimiento');
+  if(!container) return;
+
+  const hoyStr = new Date().toLocaleDateString('es-MX');
+
+  const pendientes = LEADS.filter(l => {
+    if(!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
+    const f = new Date(l.proximoseg);
+    return f.toLocaleDateString('es-MX') === hoyStr;
   });
 
-  document.getElementById('m-total').textContent = total;
-  document.getElementById('m-ganados').textContent = ganados;
-  document.getElementById('m-tasa').textContent = `${tasa}%`;
-  document.getElementById('m-monto-cerrado').textContent = `$${montoCerradoTotal.toLocaleString('es-MX')}`;
-  document.getElementById('m-monto-potencial').textContent = `$${pipelinePotencialTotal.toLocaleString('es-MX')}`;
+  const futuros = LEADS.filter(l => {
+    if(!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
+    const f = new Date(l.proximoseg);
+    return f.getTime() > new Date().getTime() && f.toLocaleDateString('es-MX') !== hoyStr;
+  });
 
-  // Inyectar mini tabla de próximos seguimientos del Tablero Principal
-  const dBody = document.getElementById('dashboard-table-body');
-  if (dBody) {
-    const proxArr = LEADS.filter(l => l.proximoseg && !['Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'].includes(l.estado))
-                         .sort((a,b) => new Date(a.proximoseg) - new Date(b.proximoseg))
-                         .slice(0, 5);
-
-    if (proxArr.length === 0) {
-      dBody.innerHTML = `<tr><td colspan="6" class="no-data-row">No hay seguimientos agendados</td></tr>`;
-    } else {
-      let html = "";
-      proxArr.forEach(l => {
-        const dStr = new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'});
-        html += `
-          <tr onclick="openEditLead(${l.id})" style="cursor:pointer;">
-            <td><strong>#${l.id}</strong></td>
-            <td>${l.nombre}</td>
-            <td><span class="status-pill status-${obtenerClaseEstado(l.estado)}">${l.estado}</span></td>
-            <td><span class="priority-indicator priority-${obtenerClasePrioridad(l.prioridad)}">${l.prioridad}</span></td>
-            <td style="color:var(--green-dk); font-weight:500;">${dStr}</td>
-            <td><strong>$${(Number(l.monto_potencial)||0).toLocaleString('es-MX')}</strong></td>
-          </tr>
-        `;
-      });
-      dBody.innerHTML = html;
-    }
-  }
-}
-
-function renderGraficosReportes() {
-  const tContainer = document.getElementById('tab-reportes');
-  if (!tContainer || tContainer.style.display === 'none') return;
-
-  // 1. Gráfico por Estado del Pipeline
-  const conteoE = {};
-  ESTADOS_PIPELINE.forEach(e => conteoE[e] = 0);
-  LEADS.forEach(l => { if (conteoE[l.estado] !== undefined) conteoE[l.estado]++; else conteoE[l.estado] = 1; });
-  inyectarGraficoBarras('rep-chart-estados', conteoE);
-
-  // 2. Gráfico por Origen / Fuente
-  const conteoF = {};
-  FUENTES.forEach(f => conteoF[f] = 0);
-  LEADS.forEach(l => { if (conteoF[l.fuente] !== undefined) conteoF[l.fuente]++; });
-  inyectarGraficoDonut('rep-chart-fuentes', conteoF);
-}
-
-function inyectarGraficoBarras(elementId, dataObj) {
-  const container = document.getElementById(elementId);
-  if (!container) return;
-
-  const valores = Object.values(dataObj);
-  const max = Math.max(...valores, 1);
-
-  let html = `<div class="bar-chart-wrapper">`;
-  Object.entries(dataObj).forEach(([k, v], idx) => {
-    const pct = Math.round((v / max) * 100);
-    const color = CHART_COLORS[idx % CHART_COLORS.length];
-    html += `
-      <div class="bar-chart-row">
-        <span class="bar-chart-label">${k}</span>
-        <div class="bar-chart-rail">
-          <div class="bar-chart-fill" style="width:${pct}%; background:${color};"></div>
+  container.innerHTML = `
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+      
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+        <div class="seg-section-title">
+          <i class="ti ti-bell-ringing" style="color:#d32f2f"></i>
+          <span><b>Seguimientos para el Día de Hoy</b> (${pendientes.length})</span>
         </div>
-        <span class="bar-chart-value">${v}</span>
+        ${pendientes.map(l => `
+          <div style="background:var(--bg2); padding:12px; border-radius:var(--radius); margin-bottom:10px; border-left:4px solid #d32f2f;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <strong>${l.nombre}</strong><br>
+                <small style="color:var(--text2)">📞 ${l.telefono} | 👤 ${l.responsable}</small>
+              </div>
+              <button class="btn btn-secondary" style="padding:2px 6px; font-size:12px" onclick="editLead(${l.id})">Atender</button>
+            </div>
+            <div style="margin-top:6px; font-size:12px; color:#c62828;">
+              <i class="ti ti-clock"></i> Hora: ${new Date(l.proximoseg).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}
+            </div>
+          </div>
+        `).join('')}
+        ${pendientes.length === 0 ? '<div class="empty">🎉 Al corriente. No tienes seguimientos agendados para hoy.</div>' : ''}
       </div>
-    `;
-  });
-  html += `</div>`;
-  container.innerHTML = html;
-}
 
-function inyectarGraficoDonut(elementId, dataObj) {
-  const container = document.getElementById(elementId);
-  if (!container) return;
-
-  const total = Object.values(dataObj).reduce((a,b)=>a+b, 0) || 1;
-  let html = `<div style="display:flex; flex-direction:column; gap:10px; width:100%;">`;
-  
-  Object.entries(dataObj).forEach(([k, v], idx) => {
-    if (v === 0) return;
-    const pct = Math.round((v / total) * 100);
-    const color = CHART_COLORS[idx % CHART_COLORS.length];
-    html += `
-      <div style="display:flex; align-items:center; gap:10px; font-size:13px;">
-        <span style="width:12px; height:12px; background:${color}; border-radius:3px; display:inline-block;"></span>
-        <span style="flex:1;">${k}</span>
-        <span style="font-weight:600;">${v} (${pct}%)</span>
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+        <div class="seg-section-title">
+          <i class="ti ti-calendar" style="color:var(--green)"></i>
+          <span><b>Próximos Seguimientos Planificados</b> (${futuros.length})</span>
+        </div>
+        ${futuros.map(l => `
+          <div style="background:var(--bg2); padding:12px; border-radius:var(--radius); margin-bottom:10px; border-left:4px solid var(--green);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <strong>${l.nombre}</strong><br>
+                <small style="color:var(--text2)">👤 ${l.responsable} | 📦 ${l.producto}</small>
+              </div>
+              <button class="btn btn-secondary" style="padding:2px 6px; font-size:12px" onclick="editLead(${l.id})">Ver</button>
+            </div>
+            <div style="margin-top:6px; font-size:12px; color:var(--text2)">
+              <i class="ti ti-calendar-event"></i> Fecha: ${new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'})}
+            </div>
+          </div>
+        `).join('')}
+        ${futuros.length === 0 ? '<div class="empty">No hay seguimientos agendados para días posteriores.</div>' : ''}
       </div>
-    `;
-  });
 
-  if (Object.values(dataObj).every(x => x === 0)) {
-    html += `<div style="text-align:center; color:var(--text3); padding:20px;">No hay datos para representar</div>`;
-  }
-  html += `</div>`;
-  container.innerHTML = html;
+    </div>
+  `;
 }
 
-// ─── PESTAÑA: CONFIGURACIÓN Y MANTENIMIENTO DE ETIQUETAS NUBE ────────────────
-function renderConfiguracionPanel() {
-  inyectarTagsConfig('cfg-wrap-fuente', FUENTES, 'fuente');
-  inyectarTagsConfig('cfg-wrap-producto', PRODUCTOS, 'producto');
-  inyectarTagsConfig('cfg-wrap-presupuesto', PRESUPUESTOS, 'presupuesto');
-  inyectarTagsConfig('cfg-wrap-situacion', ESTADOS_PIPELINE, 'situacion');
+// ─── PESTAÑA DE REPORTES: RESPETANDO TUS GRÁFICAS DE BARRAS HORIZONTALES ─────
+function renderReportes() {
+  const container = document.getElementById('tab-reportes');
+  if(!container) return;
 
-  // Inyectar Tabla de Administradores del Sistema
-  const tbody = document.getElementById('cfg-admins-table-body');
-  if (tbody) {
-    let html = `
-      <tr style="background: rgba(29, 158, 117, 0.05);">
-        <td><strong>${AUTH_USER} (Principal)</strong></td>
-        <td><span style="color:var(--green); font-weight:600;">Dueño del Sistema</span></td>
-        <td>—</td>
-      </tr>
-    `;
+  // 1. Agrupación estricta por Fuente
+  const conteoFuentes = {};
+  FUENTES.forEach(f => conteoFuentes[f] = 0);
+  LEADS.forEach(l => { if(conteoFuentes[l.fuente] !== undefined) conteoFuentes[l.fuente]++; });
 
-    ADMINS.forEach(a => {
-      if (a.user.toLowerCase() === AUTH_USER.toLowerCase()) return;
-      html += `
-        <tr>
-          <td>${a.user}</td>
-          <td>•••••••• / Administrador</td>
-          <td><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="eliminarAdminUser(${a.id})"><i class="ti ti-trash"></i> Eliminar</button></td>
-        </tr>
-      `;
-    });
-    tbody.innerHTML = html;
-  }
+  // 2. Agrupación estricta por Estado del Pipeline
+  const conteoEstados = {};
+  ESTADOS_PIPELINE.forEach(e => conteoEstados[e] = 0);
+  LEADS.forEach(l => { if(conteoEstados[l.estado] !== undefined) conteoEstados[l.estado]++; });
+
+  const maxFuente = Math.max(...Object.values(conteoFuentes), 1);
+  const maxEstado = Math.max(...Object.values(conteoEstados), 1);
+
+  container.innerHTML = `
+    <div style="display:grid; grid-template-columns: 1fr; gap:24px;">
+      
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+        <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;"><i class="ti ti-chart-bar"></i> Distribución de Leads por Fuente de Origen</h3>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          ${Object.entries(conteoFuentes).map(([fuente, cant]) => {
+            const pct = (cant / maxFuente) * 100;
+            return `
+              <div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                  <span><strong>${fuente}</strong></span>
+                  <span style="color:var(--text2)">${cant} leads</span>
+                </div>
+                <div style="background:var(--bg3); height:20px; border-radius:4px; overflow:hidden; position:relative;">
+                  <div style="background:var(--green); width:${pct}%; height:100%; transition:width 0.4s ease;"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
+        <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;"><i class="ti ti-git-commit"></i> Estado del Pipeline Comercial</h3>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          ${Object.entries(conteoEstados).map(([estado, cant]) => {
+            const pct = (cant / maxEstado) * 100;
+            return `
+              <div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                  <span><strong>${estado}</strong></span>
+                  <span style="color:var(--text2)">${cant} leads</span>
+                </div>
+                <div style="background:var(--bg3); height:20px; border-radius:4px; overflow:hidden; position:relative;">
+                  <div style="background:var(--green-dk); width:${pct}%; height:100%; transition:width 0.4s ease;"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+    </div>
+  `;
 }
 
-function inyectarTagsConfig(elementId, array, type) {
-  const container = document.getElementById(elementId);
-  if (!container) return;
-  
-  let html = "";
-  array.forEach(v => {
-    html += `
-      <span class="config-tag">
-        ${v}
-        <span class="config-tag-close" onclick="eliminarConfigTag('${type}','${v}')">&times;</span>
-      </span>
-    `;
-  });
-  container.innerHTML = html || `<span style="font-size:12px; color:var(--text3);">Lista vacía</span>`;
+// ─── PESTAÑA DE CONFIGURACIÓN (CAJAS Y ELEMENTOS VINCULADOS AL 100%) ──────────
+function renderConfiguracionTab() {
+  const container = document.getElementById('tab-config');
+  if(!container) return;
+
+  container.innerHTML = `
+    <div class="config-container">
+      
+      <div class="config-box">
+        <h3><i class="ti ti-key"></i> Actualizar Contraseña del Sistema</h3>
+        <div style="display:flex; flex-direction:column; gap:10px; max-width:400px; margin-top:10px;">
+          <div class="form-group">
+            <label>Nueva Contraseña</label>
+            <input type="password" id="cfg-new-pass" placeholder="Mínimo 6 caracteres">
+          </div>
+          <button class="btn btn-primary" style="width:fit-content" onclick="actualizarContrasenaMaster()">Actualizar Contraseña</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-user-plus"></i> Añadir Nueva Cuenta de Administrador</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:500px; margin-top:10px;">
+          <div class="form-group"><label>Usuario</label><input type="text" id="cfg-new-user" placeholder="Ej. Ventas2"></div>
+          <div class="form-group"><label>Contraseña</label><input type="password" id="cfg-new-user-pass" placeholder="••••••••"></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:10px;" onclick="agregarCuentaAdminAdicional()">Añadir Cuenta</button>
+        
+        <div style="margin-top:16px;">
+          <strong style="font-size:12px; color:var(--text2);">Cuentas Adicionales Vigentes:</strong>
+          <ul style="margin-top:6px; font-size:13px; padding-left:20px; color:var(--text);">
+            ${ADMINS.map((a, idx) => `<li>👤 <b>${a.usuario}</b> <button class="btn btn-danger" style="padding:2px 6px; font-size:11px; margin-left:8px;" onclick="eliminarCuentaAdmin(${a.id}, '${a.usuario}')">Eliminar</button></li>`).join('')}
+            ${ADMINS.length === 0 ? '<li style="color:var(--text3); list-style:none; padding-left:0;">No hay cuentas secundarias agregadas.</li>' : ''}
+          </ul>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-forms"></i> Fuentes de Origen</h3>
+        <div class="config-tags-wrapper">
+          ${FUENTES.map(f => `<span class="config-tag">${f}</span>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px; max-width:400px;">
+          <input type="text" id="add-fuente" class="form-group" style="padding:6px; margin:0;" placeholder="Nueva fuente...">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('fuente', 'add-fuente')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-package"></i> Productos de Interés</h3>
+        <div class="config-tags-wrapper">
+          ${PRODUCTOS.map(p => `<span class="config-tag">${p}</span>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px; max-width:400px;">
+          <input type="text" id="add-producto" class="form-group" style="padding:6px; margin:0;" placeholder="Nuevo producto...">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('producto', 'add-producto')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-coin"></i> Rangos de Presupuesto Estimado</h3>
+        <div class="config-tags-wrapper">
+          ${PRESUPUESTOS.map(pr => `<span class="config-tag">${pr}</span>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px; max-width:400px;">
+          <input type="text" id="add-presupuesto" class="form-group" style="padding:6px; margin:0;" placeholder="Ej. $5,000 - $10,000">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('presupuesto', 'add-presupuesto')">Añadir</button>
+        </div>
+      </div>
+
+      <div class="config-box">
+        <h3><i class="ti ti-git-fork"></i> Estados del Pipeline Comercial</h3>
+        <div class="config-tags-wrapper">
+          ${ESTADOS_PIPELINE.map(e => `<span class="config-tag">${e}</span>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px; max-width:400px;">
+          <input type="text" id="add-estado" class="form-group" style="padding:6px; margin:0;" placeholder="Nuevo estado de flujo...">
+          <button class="btn btn-primary" onclick="agregarElementoConfig('estado', 'add-estado')">Añadir</button>
+        </div>
+      </div>
+
+    </div>
+  `;
 }
 
-// ACTUALIZAR CONTRASEÑA MAESTRA PRINCIPAL
-async function actualizarPasswordMaestra() {
-  const nuevoUser = document.getElementById('cfg-main-user').value.trim();
-  const nuevoPass = document.getElementById('cfg-main-pass').value.trim();
-
-  if (!nuevoUser || !nuevoPass) {
-    alert("⚠️ El usuario y la contraseña maestra no pueden quedar vacíos.");
+// ─── ACCIONES DE CONFIGURACIÓN CON VALIDACIÓN DE CONTRASEÑA EN TIEMPO REAL ───
+async function actualizarContrasenaMaster() {
+  const newPass = document.getElementById('cfg-new-pass').value;
+  if (!newPass || newPass.length < 6) {
+    alert("⚠️ La nueva contraseña debe tener como mínimo 6 caracteres válidos.");
     return;
   }
 
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
+  // Validar con la contraseña anterior antes de sobrescribir
+  if (!solicitarYValidarContrasena("Actualizar la contraseña maestra del sistema")) return;
 
-  const registroPrincipal = ADMINS.find(a => a.user.toLowerCase() === AUTH_USER.toLowerCase());
-  let res = null;
-
-  if (registroPrincipal) {
-    res = await supabaseRequest(`config_admins?id=eq.${registroPrincipal.id}`, 'PATCH', { user: nuevoUser, pass: nuevoPass });
-  } else {
-    res = await supabaseRequest('config_admins', 'POST', { user: nuevoUser, pass: nuevoPass });
-  }
-
-  if (res) {
-    AUTH_USER = nuevoUser;
-    AUTH_PASS = nuevoPass;
-    alert("✅ ¡Éxito! Contraseña maestra guardada y actualizada correctamente.");
-    notify("🔐 Contraseña maestra cambiada.");
-    await cargarConfiguracionesBase();
-  } else {
-    alert("❌ Error al guardar la contraseña en Supabase.");
+  try {
+    localStorage.setItem('crm_current_pass', newPass);
+    notify("✅ Contraseña del sistema actualizada correctamente");
+    document.getElementById('cfg-new-pass').value = '';
+    renderConfiguracionTab();
+  } catch(e) {
+    alert("❌ Error al actualizar la contraseña local.");
   }
 }
 
-// AGREGAR ETIQUETAS DE CONFIGURACIÓN
-async function agregarConfigTag(type) {
-  const input = document.getElementById(`cfg-in-${type}`);
+async function agregarCuentaAdminAdicional() {
+  const user = document.getElementById('cfg-new-user').value.trim();
+  const pass = document.getElementById('cfg-new-user-pass').value;
+
+  if (!user || !pass) {
+    alert("⚠️ Debes rellenar los campos de Usuario y Contraseña.");
+    return;
+  }
+
+  if (!solicitarYValidarContrasena(`Crear cuenta de administrador para "${user}"`)) return;
+
+  try {
+    const { error } = await _supabase.from('crm_usuarios_admin').insert([{ usuario: user, contrasena: pass }]);
+    if (error) throw error;
+
+    notify(`✅ Cuenta secundaria "${user}" añadida con éxito.`);
+    document.getElementById('cfg-new-user').value = '';
+    document.getElementById('cfg-new-user-pass').value = '';
+    
+    // Recargar datos desde Supabase
+    const { data } = await _supabase.from('crm_usuarios_admin').select('*');
+    if(data) ADMINS = data;
+
+    renderConfiguracionTab();
+  } catch (err) {
+    console.error(err);
+    alert("❌ Error al insertar el usuario adicional en Supabase.");
+  }
+}
+
+async function eliminarCuentaAdmin(id, usuario) {
+  if (!solicitarYValidarContrasena(`Eliminar permanentemente los accesos de "${usuario}"`)) return;
+
+  try {
+    const { error } = await _supabase.from('crm_usuarios_admin').delete().eq('id', id);
+    if (error) throw error;
+
+    notify("🗑 Administrador secundario eliminado.");
+    
+    // Recargar lista
+    const { data } = await _supabase.from('crm_usuarios_admin').select('*');
+    if(data) ADMINS = data;
+
+    renderConfiguracionTab();
+  } catch (err) {
+    console.error(err);
+    alert("❌ No se pudo eliminar la cuenta secundaria.");
+  }
+}
+
+async function agregarElementoConfig(tipo, idInput) {
+  const input = document.getElementById(idInput);
   if (!input) return;
   const valor = input.value.trim();
 
   if (!valor) {
-    alert("⚠️ Ingresa un valor válido.");
+    alert("⚠️ El valor no puede estar vacío.");
     return;
   }
 
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
+  if (!solicitarYValidarContrasena(`Añadir "${valor}" a la lista de opciones de ${tipo}`)) return;
 
-  let tabla = "";
-  if (type === 'fuente') tabla = "config_fuentes";
-  if (type === 'producto') tabla = "config_productos";
-  if (type === 'presupuesto') tabla = "config_presupuestos";
-  if (type === 'situacion') tabla = "config_responsables"; // Reutiliza la tabla responsorios dinámica
+  try {
+    const { error } = await _supabase.from('crm_configuraciones').insert([{ tipo: tipo, valor: valor }]);
+    if (error) throw error;
 
-  const res = await supabaseRequest(tabla, 'POST', { nombre: valor });
-  if (res) {
-    alert("✅ Elemento añadido correctamente.");
-    input.value = "";
-    await cargarConfiguracionesBase();
-    notify("➕ Configuración actualizada.");
-  } else {
-    alert("❌ Error al agregar a la base de datos.");
+    notify(`✅ "${valor}" añadido correctamente.`);
+    input.value = '';
+
+    // Actualizar e integrar en el array correspondiente local en caliente
+    if (tipo === 'fuente') FUENTES.push(valor);
+    if (tipo === 'producto') PRODUCTOS.push(valor);
+    if (tipo === 'presupuesto') PRESUPUESTOS.push(valor);
+    if (tipo === 'estado') ESTADOS_PIPELINE.push(valor);
+
+    renderConfiguracionTab();
+    llenarSelectsFormularioLeads();
+  } catch (err) {
+    console.error(err);
+    alert("❌ Error al guardar la nueva configuración en Supabase.");
   }
 }
 
-// ELIMINAR ETIQUETAS DE CONFIGURACIÓN
-async function eliminarConfigTag(type, valor) {
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
-
-  let tabla = "";
-  if (type === 'fuente') tabla = "config_fuentes";
-  if (type === 'producto') tabla = "config_productos";
-  if (type === 'presupuesto') tabla = "config_presupuestos";
-  if (type === 'situacion') tabla = "config_responsables";
-
-  const res = await supabaseRequest(`${tabla}?nombre=eq.${encodeURIComponent(valor)}`, 'DELETE');
-  if (res) {
-    alert("✅ Elemento eliminado correctamente.");
-    await cargarConfiguracionesBase();
-    notify("🗑 Configuración actualizada.");
-  } else {
-    alert("❌ Error al eliminar de la base de datos.");
-  }
-}
-
-// AGREGAR CUENTA SECUNDARIA DE ADMINISTRADOR
-async function agregarNuevoAdmin() {
-  const userIn = document.getElementById('cfg-new-user');
-  const passIn = document.getElementById('cfg-new-pass');
-  if (!userIn || !passIn) return;
-
-  const u = userIn.value.trim();
-  const p = passIn.value.trim();
-
-  if (!u || !p) {
-    alert("⚠️ Rellena tanto el usuario como la contraseña.");
-    return;
-  }
-
-  if (u.toLowerCase() === AUTH_USER.toLowerCase()) {
-    alert("⚠️ No puedes usar el nombre del usuario principal.");
-    return;
-  }
-
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
-
-  const res = await supabaseRequest('config_admins', 'POST', { user: u, pass: p });
-  if (res) {
-    alert("✅ Nueva cuenta de Administrador añadida con éxito.");
-    userIn.value = "";
-    passIn.value = "";
-    await cargarConfiguracionesBase();
-    notify("👥 Administrador añadido.");
-  } else {
-    alert("❌ Error al guardar la cuenta secundaria.");
-  }
-}
-
-// ELIMINAR CUENTA SECUNDARIA DE ADMINISTRADOR
-async function eliminarAdminUser(id) {
-  // VALIDACIÓN DE CONTRASEÑA OBLIGATORIA DEL MOMENTO
-  if (!validarPasswordMomento()) return;
-
-  const res = await supabaseRequest(`config_admins?id=eq.${id}`, 'DELETE');
-  if (res) {
-    alert("✅ Cuenta de administrador eliminada.");
-    await cargarConfiguracionesBase();
-    notify("🗑 Administrador eliminado.");
-  } else {
-    alert("❌ Error al eliminar la cuenta secundaria.");
-  }
-}
-
-// ─── PROCESADORES INTERNOS AUXILIARES ─────────────────────────────────────────
-function switchTab(tabId, element) {
-  ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'].forEach(t => {
-    const el = document.getElementById(`tab-${t}`);
-    if (el) el.style.display = (t === tabId) ? 'block' : 'none';
-  });
-  
-  const activeTab = document.querySelector('.tab.active');
-  if (activeTab) activeTab.classList.remove('active');
-  element.classList.add('active');
-
-  if (tabId === 'reportes') renderGraficosReportes();
-}
-
-function obtenerClaseEstado(st) {
-  if (!st) return 'nuevo';
-  const s = st.toLowerCase();
-  if (s.includes('ganado')) return 'ganado';
-  if (s.includes('perdido')) return 'perdido';
-  if (s.includes('propuesta') || s.includes('negociación')) return 'proceso';
-  if (s.includes('contactado') || s.includes('calificado')) return 'contacto';
-  return 'nuevo';
-}
-
-function obtenerClasePrioridad(p) {
-  if (!p) return 'media';
-  const pr = p.toLowerCase();
-  if (pr === 'alta') return 'alta';
-  if (pr === 'baja') return 'baja';
-  return 'media';
-}
-
-function extraerNumeroMonto(str) {
-  if (!str) return 0;
-  const match = str.replace(/[^0-9]/g, '');
-  return match ? Number(match) : 0;
-}
-
+// ─── UTILIDADES OPERATIVAS Y VENTANAS FLOTANTES ────────────────────────────────
 function notify(msg) {
-  const n = document.getElementById('notification-toast');
-  if (!n) return;
-  n.innerHTML = `<i class="ti ti-check"></i> ${msg}`;
-  n.classList.add('show');
-  setTimeout(() => { n.classList.remove('show'); }, 3000);
+  const notif = document.getElementById('notification');
+  if(!notif) return;
+  notif.textContent = msg;
+  notif.classList.add('show');
+  setTimeout(() => { notif.classList.remove('show'); }, 3500);
 }
 
-function verificarRecordatoriosHoy(leads) {
+function verifySeguimientosHoy(leads) {
   const hoyStr = new Date().toLocaleDateString('es-MX');
   const hoyLeads = leads ? leads.filter(l => {
     if (!l.proximoseg) return false;
     const f = new Date(l.proximoseg);
-    return f.toLocaleDateString('es-MX') === hoyStr && !['Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'].includes(l.estado);
+    return f.toLocaleDateString('es-MX') === hoyStr && l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado';
   }) : [];
 
   if (hoyLeads.length > 0) {
@@ -814,9 +792,9 @@ function verificarRecordatoriosHoy(leads) {
 
 function exportCSV() {
   if (LEADS.length === 0) return;
-  let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\n";
+  let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\\n";
   LEADS.forEach(l => {
-    csv += `"${l.id}","${l.nombre}","${l.empresa || ''}","${l.telefono || ''}","${l.correo || ''}","${l.ciudad || ''}","${l.estado_rep || ''}","${l.fuente}","${l.producto}","${l.presupuesto}","${l.responsable}","${l.prioridad}","${l.estado || 'Nuevo'}","${l.proximoseg || ''}"\n`;
+    csv += `\"${l.id}\",\"${l.nombre}\",\"${l.empresa || ''}\",\"${l.telefono || ''}\",\"${l.correo || ''}\",\"${l.ciudad || ''}\",\"${l.estado_rep || ''}\",\"${l.fuente}\",\"${l.producto}\",\"${l.presupuesto}\",\"${l.responsable}\",\"${l.prioridad}\",\"${l.estado || 'Nuevo'}\",\"${l.proximoseg || ''}\"\\n`;
   });
   const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement("a");
@@ -827,10 +805,37 @@ function exportCSV() {
   document.body.removeChild(link);
 }
 
-window.onload = function() {
-  if (sessionStorage.getItem('crm_logged_in') === 'true') {
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('main-layout').style.display = 'block';
-    inicializarSistema();
+function togglePanel(show) {
+  const overlay = document.getElementById('overlay');
+  const panel = document.getElementById('panel');
+  if (overlay && panel) {
+    if (show) {
+      overlay.style.display = 'block';
+      setTimeout(() => {
+        overlay.classList.add('active');
+        panel.classList.add('active');
+      }, 10);
+    } else {
+      overlay.classList.remove('active');
+      panel.classList.remove('active');
+      setTimeout(() => { overlay.style.display = 'none'; }, 300);
+    }
   }
+}
+
+function closePanel(e) {
+  if (e && e.target.id === 'overlay') {
+    togglePanel(false);
+  }
+}
+
+// ─── DETONACIÓN AL CARGAR LA VENTANA VIGENTE ──────────────────────────────────
+window.onload = function() {
+  fetchConfiguraciones().then(() => {
+    if (sessionStorage.getItem('crm_logged_in') === 'true') {
+      document.getElementById('login-container').style.display = 'none';
+      document.getElementById('main-layout').style.display = 'block';
+      inicializarCRM();
+    }
+  });
 };

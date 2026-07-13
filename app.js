@@ -2,16 +2,17 @@
 const SUPABASE_URL = "https://cbujbplkjogntjaoooqj.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNidWpicGxram9nbnRqYW9vb3FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MzkxODIsImV4cCI6MjA5OTExNTE4Mn0.kcpmcKS4uOYSRk_0a96TOnDauF5YM3qHVw7Iy5tEy0M";
 
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let supabaseClient = null;
 
-// Arreglos globales dinámicos que se sincronizan con Supabase
+let AUTH_USER = "Herbolaria";
+let AUTH_PASS = "Saludable*"; 
+
 let ADMINS = [];
 let FUENTES = [];
 let PRODUCTOS = [];
 let PRESUPUESTOS = [];
 let ESTADOS_PIPELINE = [];
 
-// ELEMENTOS FIJOS SOLICITADOS
 const RESPONSABLES = [
   'Pilar Gonzalez - marketing digital',
   'Ana Maria Alonso - Ventas Online',
@@ -23,760 +24,705 @@ const PRIORIDADES = ['Alta', 'Media', 'Baja'];
 let LEADS = [];
 let currentLeadId = null;
 
-// ─── FUNCIÓN AUXILIAR DE VALIDACIÓN DE SEGURIDAD EXCLUSIVA ────────────────────
-function solicitarYValidarContrasena(accionTexto) {
-  const passwordIntroducido = prompt(`🔒 Ingrese la contraseña actual del CRM para autorizar la acción:\n"${accionTexto}"`);
-  
-  if (passwordIntroducido === null) return false; // El usuario canceló
-
-  // Obtener las credenciales vigentes en tiempo real desde localStorage o memoria
-  const currentPass = localStorage.getItem('crm_current_pass') || "Saludable*";
-
-  if (passwordIntroducido === currentPass) {
-    return true;
+// Inicialización e intento de Carga Inicial Segura
+document.addEventListener("DOMContentLoaded", async () => {
+  if (typeof supabase !== 'undefined') {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    await cargarConfiguracionDesdeSupabase();
   } else {
-    alert("❌ Contraseña incorrecta. Acción cancelada y no autorizada.");
-    return false;
+    console.error("Supabase CDN no está disponible en este momento.");
   }
-}
+});
 
-// ─── CARGA INICIAL DE CONFIGURACIONES DESDE SUPABASE ─────────────────────────
-async function fetchConfiguraciones() {
+async function cargarConfiguracionDesdeSupabase() {
+  if (!supabaseClient) return;
   try {
-    // Inicializar contraseña local si no existe
-    if (!localStorage.getItem('crm_current_pass')) {
-      localStorage.setItem('crm_current_pass', "Saludable*");
-      localStorage.setItem('crm_current_user', "Herbolaria");
+    const { data: configData, error } = await supabaseClient.from('crm_config').select('*');
+    if (error) throw error;
+
+    ADMINS = configData.filter(c => c.tipo === 'admin');
+    FUENTES = configData.filter(c => c.tipo === 'fuente').map(c => c.valor);
+    PRODUCTOS = configData.filter(c => c.tipo === 'producto').map(c => c.valor);
+    PRESUPUESTOS = configData.filter(c => c.tipo === 'presupuesto').map(c => c.valor);
+    ESTADOS_PIPELINE = configData.filter(c => c.tipo === 'estado').map(c => c.valor);
+
+    const mainAcc = ADMINS.find(a => a.valor === 'Herbolaria');
+    if (mainAcc) {
+      AUTH_PASS = mainAcc.extra || "Saludable*";
     }
 
-    const { data: dataCfg, error: errCfg } = await _supabase.from('crm_configuraciones').select('*');
-    if (errCfg) throw errCfg;
-
-    // Clasificar registros por tipo
-    FUENTES = dataCfg.filter(c => c.tipo === 'fuente').map(c => c.valor);
-    PRODUCTOS = dataCfg.filter(c => c.tipo === 'producto').map(c => c.valor);
-    PRESUPUESTOS = dataCfg.filter(c => c.tipo === 'presupuesto').map(c => c.valor);
-    ESTADOS_PIPELINE = dataCfg.filter(c => c.tipo === 'estado').map(c => c.valor);
-
-    // Si la base está vacía o faltan configuraciones críticas, cargar mocks por defecto
-    if(FUENTES.length === 0) {
-      FUENTES = ['Facebook Ads', 'Instagram Ads', 'Google Ads', 'WhatsApp', 'Referido', 'Página Web', 'TikTok'];
-      await guardarMultiplesConfiguraciones('fuente', FUENTES);
-    }
-    if(PRODUCTOS.length === 0) {
-      PRODUCTOS = ['Cápsulas Herbolarias', 'Tés Medicinales', 'Extractos Líquidos', 'Suplementos Vitamínicos'];
-      await guardarMultiplesConfiguraciones('producto', PRODUCTOS);
-    }
-    if(PRESUPUESTOS.length === 0) {
-      PRESUPUESTOS = ['< $5,000', '$5,000 - $15,000', '$15,000 - $50,000', '> $50,000'];
-      await guardarMultiplesConfiguraciones('presupuesto', PRESUPUESTOS);
-    }
-    if(ESTADOS_PIPELINE.length === 0) {
-      ESTADOS_PIPELINE = ['Nuevo', 'Contactado', 'Calificado', 'Propuesta Enviada', 'En Negociación', 'Cerrado Ganado', 'Cerrado Perdido', 'Abandonado'];
-      await guardarMultiplesConfiguraciones('estado', ESTADOS_PIPELINE);
-    }
-
-    // Cargar cuentas adicionales de administradores desde Supabase
-    const { data: dataAdmins, error: errAdmins } = await _supabase.from('crm_usuarios_admin').select('*');
-    if (!errAdmins && dataAdmins) {
-      ADMINS = dataAdmins;
-    }
-
-  } catch (error) {
-    console.error("Error cargando configuraciones iniciales:", error);
+    actualizarTodosLosSelectsFormulario();
+    renderConfigTags();
+    renderAdminUsersTable();
+  } catch (err) {
+    console.error("Error cargando configuración inicial:", err.message);
   }
 }
 
-async function guardarMultiplesConfiguraciones(tipo, arrayValores) {
-  const rows = arrayValores.map(v => ({ tipo: tipo, valor: v }));
-  await _supabase.from('crm_configuraciones').insert(rows);
-}
+// MANEJO DE LOGIN / ACCESO SIMPLE
+async function handleLogin() {
+  const userIn = document.getElementById("login-user").value.trim();
+  const passIn = document.getElementById("login-pass").value.trim();
+  const errDiv = document.getElementById("login-error");
 
-// ─── SISTEMA DE AUTENTICACIÓN Y ACCESO ────────────────────────────────────────
-function handleLogin() {
-  const userVal = document.getElementById('login-user').value.trim();
-  const passVal = document.getElementById('login-pass').value;
-  const errorMsg = document.getElementById('login-error');
+  let loginValido = false;
 
-  const masterUser = localStorage.getItem('crm_current_user') || "Herbolaria";
-  const masterPass = localStorage.getItem('crm_current_pass') || "Saludable*";
-
-  // Verificar cuenta maestra o cuentas adicionales cargadas
-  const matchAdmin = ADMINS.find(a => a.usuario.toLowerCase() === userVal.toLowerCase() && a.contrasena === passVal);
-
-  if ((userVal.toLowerCase() === masterUser.toLowerCase() && passVal === masterPass) || matchAdmin) {
-    if(errorMsg) errorMsg.style.display = 'none';
-    sessionStorage.setItem('crm_logged_in', 'true');
-    sessionStorage.setItem('crm_user_activo', userVal);
-    
-    document.getElementById('login-container').style.display = 'none';
-    document.getElementById('main-layout').style.display = 'block';
-    
-    inicializarCRM();
+  if (userIn === AUTH_USER && passIn === AUTH_PASS) {
+    loginValido = true;
   } else {
-    if(errorMsg) errorMsg.style.display = 'block';
+    const cuentaAdicional = ADMINS.find(a => a.valor === userIn && a.extra === passIn);
+    if (cuentaAdicional) loginValido = true;
+  }
+
+  if (loginValido) {
+    document.getElementById("login-container").style.display = "none";
+    document.getElementById("main-layout").style.display = "flex";
+    showToast("¡Acceso correcto! Cargando datos...");
+    await fetchLeadsDesdeSupabase();
+  } else {
+    errDiv.innerText = "Usuario o contraseña incorrectos.";
+    errDiv.style.display = "block";
   }
 }
 
 function handleLogout() {
-  sessionStorage.removeItem('crm_logged_in');
-  sessionStorage.removeItem('crm_user_activo');
-  document.getElementById('main-layout').style.display = 'none';
-  document.getElementById('login-container').style.display = 'flex';
-  document.getElementById('login-user').value = '';
-  document.getElementById('login-pass').value = '';
+  document.getElementById("login-user").value = "";
+  document.getElementById("login-pass").value = "";
+  document.getElementById("main-layout").style.display = "none";
+  document.getElementById("login-container").style.display = "flex";
+  if(document.getElementById("login-error")) document.getElementById("login-error").style.display = "none";
 }
 
-// ─── CONTROLADOR GLOBAL DE PESTAÑAS DEL SISTEMA ──────────────────────────────
-function switchTab(tabId, element) {
-  const tabs = document.querySelectorAll('.tab');
-  tabs.forEach(t => t.classList.remove('active'));
-  element.classList.add('active');
-
-  const contents = ['tab-dashboard', 'tab-leads', 'tab-seguimiento', 'tab-reportes', 'tab-config'];
-  contents.forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.style.display = 'none';
-  });
-
-  const activeContent = document.getElementById(`tab-${tabId}`);
-  if(activeContent) {
-    activeContent.style.display = 'block';
-    if (tabId === 'dashboard') renderDashboard();
-    if (tabId === 'leads') renderLeadsTable();
-    if (tabId === 'seguimiento') renderSeguimiento();
-    if (tabId === 'reportes') renderReportes();
-    if (tabId === 'config') renderConfiguracionTab();
-  }
-}
-
-// ─── INICIALIZACIÓN GENERAL DE DATOS A SUPABASE ────────────────────────────────
-async function inicializarCRM() {
-  await fetchConfiguraciones();
-  await cargarLeadsSupabase();
-  renderDashboard();
-  llenarSelectsFormularioLeads();
-  verificarSeguimientosHoy(LEADS);
-}
-
-async function cargarLeadsSupabase() {
+// CARGA DE LEADS DESDE SUPABASE
+async function fetchLeadsDesdeSupabase() {
+  if (!supabaseClient) return;
   try {
-    const { data, error } = await _supabase.from('crm_leads').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabaseClient
+      .from('crm_leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     if (error) throw error;
     LEADS = data || [];
+    
+    procesarDashboardMétricasYGráficos();
+    renderTodosLosLeadsTabla();
+    renderPestañaSeguimiento();
+    procesarReportesAvanzados();
+    evaluarRecordatoriosHoy(LEADS);
   } catch (err) {
-    console.error("Error al descargar leads de Supabase:", err);
+    showToast("Error al sincronizar leads: " + err.message);
   }
 }
 
-// ─── LLENADO DINÁMICO DE SELECTORES EN PANEL ───────────────────────────────────
-function llenarSelectsFormularioLeads() {
-  llenarSelectEspecifico('n-fuente', FUENTES);
-  llenarSelectEspecifico('n-producto', PRODUCTOS);
-  llenarSelectEspecifico('n-presupuesto', PRESUPUESTOS);
-  llenarSelectEspecifico('n-responsable', RESPONSABLES);
-  llenarSelectEspecifico('n-prioridad', PRIORIDADES);
-  llenarSelectEspecifico('n-situacion', ESTADOS_PIPELINE);
+// NAVEGACIÓN ENTRE PESTAÑAS
+function switchTab(tabId, el) {
+  const tabs = ['dashboard', 'leads', 'seguimiento', 'reportes', 'config'];
+  tabs.forEach(t => {
+    const target = document.getElementById(`tab-${t}`);
+    if (target) target.style.display = (t === tabId) ? 'block' : 'none';
+  });
+
+  const allTabsDOM = document.querySelectorAll(".tabs .tab");
+  allTabsDOM.forEach(t => t.classList.remove("active"));
+  if (el) el.classList.add("active");
+
+  if (tabId === 'dashboard') procesarDashboardMétricasYGráficos();
+  if (tabId === 'leads') renderTodosLosLeadsTabla();
+  if (tabId === 'seguimiento') renderPestañaSeguimiento();
+  if (tabId === 'reportes') procesarReportesAvanzados();
+  if (tabId === 'config') {
+    document.getElementById("cfg-main-user").value = AUTH_USER;
+    renderConfigTags();
+    renderAdminUsersTable();
+  }
 }
 
-function llenarSelectEspecifico(idElemento, arrayDatos) {
-  const select = document.getElementById(idElemento);
-  if(!select) return;
-  select.innerHTML = '';
-  arrayDatos.forEach(val => {
-    const opt = document.createElement('option');
-    opt.value = val;
-    opt.textContent = val;
-    select.appendChild(opt);
+// SELECTS ACTUALIZACIÓN
+function actualizarTodosLosSelectsFormulario() {
+  rellenarSelect("n-fuente", FUENTES);
+  rellenarSelect("n-producto", PRODUCTOS);
+  rellenarSelect("n-presupuesto", PRESUPUESTOS);
+  rellenarSelect("n-responsable", RESPONSABLES);
+  rellenarSelect("n-prioridad", PRIORIDADES);
+  rellenarSelect("n-situacion", ESTADOS_PIPELINE);
+
+  rellenarSelectFiltro("f-fuente", FUENTES, "Todas las fuentes");
+  rellenarSelectFiltro("f-estado", ESTADOS_PIPELINE, "Todos los estados");
+  rellenarSelectFiltro("f-responsable", RESPONSABLES, "Todos los responsables");
+  rellenarSelectFiltro("f-prioridad", PRIORIDADES, "Todas las prioridades");
+}
+
+function rellenarSelect(id, array) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  select.innerHTML = array.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+function rellenarSelectFiltro(id, array, defaultText) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  select.innerHTML = `<option value="">${defaultText}</option>` + array.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+// PESTAÑA CONFIGURACIÓN Y ETIQUETAS DINÁMICAS (CORREGIDO Y OPERATIVO)
+function renderConfigTags() {
+  armarCajaTags("cfg-wrap-fuente", FUENTES, "fuente");
+  armarCajaTags("cfg-wrap-producto", PRODUCTOS, "producto");
+  armarCajaTags("cfg-wrap-presupuesto", PRESUPUESTOS, "presupuesto");
+  armarCajaTags("cfg-wrap-estado", ESTADOS_PIPELINE, "estado");
+}
+
+function armarCajaTags(containerId, array, tipo) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  if (array.length === 0) {
+    wrap.innerHTML = `<span style="color:var(--text3); font-size:12px;">Ninguno configurado</span>`;
+    return;
+  }
+  wrap.innerHTML = array.map(val => `
+    <span class="config-tag">
+      ${val} 
+      <i class="ti ti-x" style="margin-left:6px; cursor:pointer; color:var(--red);" onclick="eliminarConfigTag('${tipo}', '${val.replace(/'/g, "\\'")}')">❌</i>
+    </span>
+  `).join('');
+}
+
+async function agregarConfigTag(tipo) {
+  const input = document.getElementById(`cfg-in-${tipo}`);
+  if (!input) return;
+  const valor = input.value.trim();
+  if (!valor) return;
+
+  if (tipo === 'fuente' && FUENTES.includes(valor)) return;
+  if (tipo === 'producto' && PRODUCTOS.includes(valor)) return;
+  if (tipo === 'presupuesto' && PRESUPUESTOS.includes(valor)) return;
+  if (tipo === 'estado' && ESTADOS_PIPELINE.includes(valor)) return;
+
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('crm_config').insert([{ tipo, valor }]);
+      if (error) throw error;
+      showToast(`¡${tipo} agregada con éxito!`);
+      input.value = "";
+      await cargarConfiguracionDebbieYListas();
+    } catch (e) {
+      showToast("Error al guardar en Supabase: " + e.message);
+    }
+  }
+}
+
+async function eliminarConfigTag(tipo, valor) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar la opción "${valor}"?`)) return;
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('crm_config').delete().eq('tipo', tipo).eq('valor', valor);
+      if (error) throw error;
+      showToast("Elemento removido correctamente.");
+      await cargarConfiguracionDebbieYListas();
+    } catch (e) {
+      showToast("Error al remover de Supabase: " + e.message);
+    }
+  }
+}
+
+async function cargarConfiguracionDebbieYListas() {
+  await cargarConfiguracionDesdeSupabase();
+}
+
+// ADMINISTRADORES CONFIGURACIÓN
+async function renderAdminUsersTable() {
+  const tbody = document.getElementById("cfg-table-admins");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td>${AUTH_USER} (Principal)</td><td>•••••••• / Máximo</td><td>-</td></tr>`;
+  ADMINS.forEach(a => {
+    if (a.valor === 'Herbolaria') return;
+    tbody.innerHTML += `
+      <tr>
+        <td>${a.valor}</td>
+        <td>${a.extra} / Sub-cuenta</td>
+        <td><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="eliminarAdminUser(${a.id})">Eliminar</button></td>
+      </tr>`;
   });
 }
 
-// ─── OPERACIONES Y APARTADO DE LEADS (GUARDAR / EDITAR) ────────────────────────
-function openNewLead() {
-  currentLeadId = null;
-  document.getElementById('panel-title').innerHTML = '<i class="ti ti-user-plus"></i> Nuevo Lead';
-  
-  // Limpiar inputs
-  document.getElementById('n-nombre').value = '';
-  document.getElementById('n-empresa').value = '';
-  document.getElementById('n-telefono').value = '';
-  document.getElementById('n-correo').value = '';
-  document.getElementById('n-ciudad').value = '';
-  document.getElementById('n-estadorep').value = '';
-  document.getElementById('n-seg').value = '';
-  document.getElementById('n-notas').value = '';
-  
-  llenarSelectsFormularioLeads();
-  document.getElementById('btn-delete-lead').style.display = 'none';
-  togglePanel(true);
+async function actualizarPasswordPrincipal() {
+  const newPass = document.getElementById("cfg-main-pass").value.trim();
+  if (!newPass) return;
+  if (supabaseClient) {
+    try {
+      const { data: exist } = await supabaseClient.from('crm_config').select('*').eq('tipo', 'admin').eq('valor', 'Herbolaria');
+      if (exist && exist.length > 0) {
+        await supabaseClient.from('crm_config').update({ extra: newPass }).eq('valor', 'Herbolaria');
+      } else {
+        await supabaseClient.from('crm_config').insert([{ tipo: 'admin', valor: 'Herbolaria', extra: newPass }]);
+      }
+      AUTH_PASS = newPass;
+      document.getElementById("cfg-main-pass").value = "";
+      showToast("Contraseña principal actualizada.");
+    } catch (e) {
+      showToast("Error actualizando credencial: " + e.message);
+    }
+  }
 }
 
-function editLead(id) {
-  const lead = LEADS.find(l => l.id == id);
+async function agregarAdminUser() {
+  const u = document.getElementById("cfg-add-user").value.trim();
+  const p = document.getElementById("cfg-add-pass").value.trim();
+  if (!u || !p) return;
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('crm_config').insert([{ tipo: 'admin', valor: u, extra: p }]);
+      document.getElementById("cfg-add-user").value = "";
+      document.getElementById("cfg-add-pass").value = "";
+      showToast("Nueva cuenta añadida.");
+      await cargarConfiguracionDebbieYListas();
+    } catch (e) {
+      showToast("Error al añadir cuenta: " + e.message);
+    }
+  }
+}
+
+async function eliminarAdminUser(id) {
+  if (!confirm("¿Eliminar este usuario de acceso?")) return;
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('crm_config').delete().eq('id', id);
+      showToast("Usuario removido.");
+      await cargarConfiguracionDebbieYListas();
+    } catch (e) {
+      showToast("Error al remover usuario.");
+    }
+  }
+}
+
+// DASHBOARD: ANALÍTICA Y COMPONENTES VISUALES MOCK-CHARTS MANTENIDOS COMPLETOS
+function procesarDashboardMétricasYGráficos() {
+  document.getElementById("m-total").innerText = LEADS.length;
+  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado');
+  document.getElementById("m-ganados").innerText = ganados.length;
+  
+  const tasa = LEADS.length > 0 ? ((ganados.length / LEADS.length) * 100).toFixed(1) : 0;
+  document.getElementById("m-tasa").innerText = tasa + "%";
+
+  const montoCerrado = ganados.reduce((acc, curr) => acc + (Number(curr.monto_cerrado) || 0), 0);
+  document.getElementById("m-monto-cerrado").innerText = "$" + montoCerrado.toLocaleString('es-MX');
+
+  const pipeline = LEADS.filter(l => l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado');
+  const montoPotencial = pipeline.reduce((acc, curr) => acc + (Number(curr.monto_potencial) || 0), 0);
+  document.getElementById("m-monto-potencial").innerText = "$" + montoPotencial.toLocaleString('es-MX');
+
+  const hoy = new Date();
+  const vencidos = LEADS.filter(l => {
+    if (!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
+    return new Date(l.proximoseg) < hoy;
+  });
+  document.getElementById("m-vencidos").innerText = vencidos.length;
+
+  document.getElementById("m-abandonados").innerText = LEADS.filter(l => l.estado === 'Abandonado').length;
+  document.getElementById("m-perdidos").innerText = LEADS.filter(l => l.estado === 'Cerrado Perdido').length;
+
+  // Renderizar gráficos simples CSS inside containers
+  dibujarGraficoBarrasGenerico("chart-fuente", LEADS, 'fuente');
+  dibujarGraficoBarrasGenerico("chart-estado", LEADS, 'estado');
+  dibujarGraficoBarrasGenerico("chart-responsable", LEADS, 'responsable');
+  dibujarGraficoBarrasGenerico("chart-producto", LEADS, 'producto');
+
+  // Próximos seguimientos activos (Máximo 5)
+  const activosSeg = pipeline.filter(l => l.proximoseg).sort((a,b) => new Date(a.proximoseg) - new Date(b.proximoseg)).slice(0, 5);
+  const tbody = document.getElementById("dashboard-table-body");
+  if (activosSeg.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="no-data-row">No hay seguimientos agendados activos</td></tr>`;
+  } else {
+    tbody.innerHTML = activosSeg.map(l => `
+      <tr style="cursor:pointer;" onclick="abrirLeadParaEditar(${l.id})">
+        <td>#${l.id}</td>
+        <td><strong>${l.nombre}</strong></td>
+        <td><span class="badge badge-default">${l.estado || 'Nuevo'}</span></td>
+        <td>${l.responsable || 'Sin asignar'}</td>
+        <td>${new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'})}</td>
+        <td>$${(Number(l.monto_potencial) || 0).toLocaleString('es-MX')}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+function dibujarGraficoBarrasGenerico(idContenedor, dataset, propiedad) {
+  const container = document.getElementById(idContenedor);
+  if (!container) return;
+  
+  const conteos = {};
+  dataset.forEach(item => {
+    const val = item[propiedad] || 'No definido';
+    conteos[val] = (conteos[val] || 0) + 1;
+  });
+
+  const llaves = Object.keys(conteos);
+  if (llaves.length === 0) {
+    container.innerHTML = `<div class="no-records">Sin registros</div>`;
+    return;
+  }
+
+  const maxVal = Math.max(...Object.values(conteos));
+  let html = `<div style="display:flex; flex-direction:column; gap:8px; padding:10px 0;">`;
+  
+  llaves.forEach(llave => {
+    const count = conteos[llave];
+    const pct = maxVal > 0 ? (count / maxVal) * 100 : 0;
+    html += `
+      <div style="font-size:12px;">
+        <div style="display:flex; justify-content:between; margin-bottom:2px;">
+          <span>${llave}</span>
+          <span style="font-weight:bold; margin-left:auto;">${count}</span>
+        </div>
+        <div style="background:var(--bg2); border-radius:4px; height:8px; width:100%;">
+          <div style="background:var(--green); width:${pct}%; height:100%; border-radius:4px;"></div>
+        </div>
+      </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// PESTAÑA TODOS LOS LEADS Y FILTRADO
+function renderTodosLosLeadsTabla() {
+  const tbody = document.getElementById("leads-table-body");
+  if (!tbody) return;
+  
+  const filtrados = obtenerLeadsFiltrados();
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="11" class="no-data-row">Ningún lead coincide con los filtros aplicados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(l => {
+    const pSeg = l.proximoseg ? new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'}) : '-';
+    return `
+      <tr style="cursor:pointer;" onclick="abrirLeadParaEditar(${l.id})">
+        <td>#${l.id}</td>
+        <td>${l.created_at ? new Date(l.created_at).toLocaleDateString('es-MX') : '-'}</td>
+        <td>
+          <div style="font-weight:600; color:var(--text);">${l.nombre}</div>
+          <div style="font-size:12px; color:var(--text2);">${l.empresa || ''}</div>
+        </td>
+        <td style="font-size:12px;">
+          <div>${l.telefono || ''}</div>
+          <div style="color:var(--text2);">${l.correo || ''}</div>
+        </td>
+        <td><span class="badge badge-default">${l.fuente || '-'}</span></td>
+        <td style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${l.producto || '-'}</td>
+        <td style="font-size:12px;">${l.responsable || '-'}</td>
+        <td><span class="badge badge-default">${l.estado || 'Nuevo'}</span></td>
+        <td><span class="badge badge-default">${l.prioridad || 'Media'}</span></td>
+        <td style="font-size:12px;">${pSeg}</td>
+        <td><strong>$${(Number(l.monto_potencial) || 0).toLocaleString('es-MX')}</strong></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filtrarTodosLosLeads() {
+  renderTodosLosLeadsTabla();
+}
+
+function obtenerLeadsFiltrados() {
+  const s = document.getElementById("f-search").value.toLowerCase();
+  const f = document.getElementById("f-fuente").value;
+  const e = document.getElementById("f-estado").value;
+  const r = document.getElementById("f-responsable").value;
+  const p = document.getElementById("f-prioridad").value;
+
+  return LEADS.filter(l => {
+    if (f && l.fuente !== f) return false;
+    if (e && l.estado !== e) return false;
+    if (r && l.responsable !== r) return false;
+    if (p && l.prioridad !== p) return false;
+    
+    if (s) {
+      const matchN = l.nombre ? l.nombre.toLowerCase().includes(s) : false;
+      const matchE = l.empresa ? l.empresa.toLowerCase().includes(s) : false;
+      const matchT = l.telefono ? l.telefono.includes(s) : false;
+      return matchN || matchE || matchT;
+    }
+    return true;
+  });
+}
+
+// PESTAÑA SEGUIMIENTO CON SEGMENTOS EN TABLAS INDEPENDIENTES
+function renderPestañaSeguimiento() {
+  const pipeline = LEADS.filter(l => l.estado !== 'Cerrado Ganado' && l.estado !== 'Cerrado Perdido' && l.estado !== 'Abandonado' && l.proximoseg);
+  
+  const ahora = new Date();
+  const hoyStr = ahora.toLocaleDateString('es-MX');
+
+  const vencidos = [];
+  const hoyList = [];
+  const futuros = [];
+
+  pipeline.forEach(l => {
+    const fSeg = new Date(l.proximoseg);
+    if (fSeg < ahora && fSeg.toLocaleDateString('es-MX') !== hoyStr) {
+      vencidos.push(l);
+    } else if (fSeg.toLocaleDateString('es-MX') === hoyStr) {
+      hoyList.push(l);
+    } else {
+      const limiteFuturo = new Date();
+      limiteFuturo.setDate(limiteFuturo.getDate() + 14);
+      if (fSeg <= limiteFuturo) futuros.push(l);
+    }
+  });
+
+  document.getElementById("count-vencidos").innerText = vencidos.length;
+  document.getElementById("count-hoy").innerText = hoyList.length;
+  document.getElementById("count-futuros").innerText = futuros.length;
+
+  llenarSubtablaSeguimiento("table-vencidos", vencidos);
+  llenarSubtablaSeguimiento("table-hoy", hoyList);
+  llenarSubtablaSeguimiento("table-futuros", futuros);
+}
+
+function llenarSubtablaSeguimiento(tableBodyId, list) {
+  const tbody = document.getElementById(tableBodyId);
+  if (!tbody) return;
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="no-data-row">Sin leads en esta categoría ✓</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(l => `
+    <tr style="cursor:pointer;" onclick="abrirLeadParaEditar(${l.id})">
+      <td>#${l.id}</td>
+      <td><strong>${l.nombre}</strong></td>
+      <td>${l.fuente}</td>
+      <td><span class="badge badge-default">${l.estado}</span></td>
+      <td>${l.responsable}</td>
+      <td>${new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'})}</td>
+    </tr>
+  `).join('');
+}
+
+// PESTAÑA REPORTES AVANZADOS
+function procesarReportesAvanzados() {
+  const ahora = new Date();
+  const mesActual = ahora.getMonth();
+  const añoActual = ahora.getFullYear();
+
+  const leadsMes = LEADS.filter(l => {
+    if (!l.created_at) return false;
+    const c = new Date(l.created_at);
+    return c.getMonth() === mesActual && c.getFullYear() === añoActual;
+  });
+  document.getElementById("r-mensual").innerText = leadsMes.length;
+
+  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado');
+  const tasa = LEADS.length > 0 ? ((ganados.length / LEADS.length) * 100).toFixed(1) : 0;
+  document.getElementById("r-conversion").innerText = tasa + "%";
+
+  const totalVendido = ganados.reduce((acc, curr) => acc + (Number(curr.monto_cerrado) || 0), 0);
+  document.getElementById("r-total").innerText = "$" + totalVendido.toLocaleString('es-MX');
+
+  const promedio = ganados.length > 0 ? Math.round(totalVendido / ganados.length) : 0;
+  document.getElementById("r-promedio").innerText = "$" + promedio.toLocaleString('es-MX');
+
+  // Render de Gráficos de Reportes
+  dibujarGraficoReporteMeses();
+  dibujarGraficoBarrasGenerico("chart-rep-canal", ganados, 'fuente');
+  dibujarGraficoBarrasGenerico("chart-rep-responsable", ganados, 'responsable');
+}
+
+function dibujarGraficoReporteMeses() {
+  const container = document.getElementById("chart-rep-mes");
+  if (!container) return;
+  
+  const conteoMeses = {};
+  LEADS.forEach(l => {
+    if (!l.created_at) return;
+    const f = new Date(l.created_at);
+    const label = f.toLocaleString('es-MX', { month: 'short', year: '2-digit' });
+    conteoMeses[label] = (conteoMeses[label] || 0) + 1;
+  });
+
+  const llaves = Object.keys(conteoMeses);
+  if (llaves.length === 0) {
+    container.innerHTML = `<div class="no-records">Sin registros</div>`;
+    return;
+  }
+
+  const maxVal = Math.max(...Object.values(conteoMeses));
+  let html = `<div style="display:flex; height:120px; align-items:flex-end; gap:16px; padding:20px 10px 0 10px; justify-content:center;">`;
+  
+  llaves.forEach(mes => {
+    const count = conteoMeses[mes];
+    const pct = maxVal > 0 ? (count / maxVal) * 100 : 0;
+    html += `
+      <div style="display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; flex:1; max-width:60px;">
+        <span style="font-size:11px; font-weight:bold; margin-bottom:4px;">${count}</span>
+        <div style="background:var(--green); width:100%; height:${pct}%; border-radius:4px 4px 0 0;"></div>
+        <span style="font-size:10px; color:var(--text2); margin-top:4px; white-space:nowrap;">${mes}</span>
+      </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// FORMULARIO MODAL: CREAR, EDITAR Y RETROCEDER INTEGRACIÓN A BASE DE DATOS
+function abrirLeadParaEditar(id) {
+  const lead = LEADS.find(l => l.id === id);
   if (!lead) return;
 
   currentLeadId = lead.id;
-  document.getElementById('panel-title').innerHTML = '<i class="ti ti-edit"></i> Editar Lead';
-
-  document.getElementById('n-nombre').value = lead.nombre || '';
-  document.getElementById('n-empresa').value = lead.empresa || '';
-  document.getElementById('n-telefono').value = lead.telefono || '';
-  document.getElementById('n-correo').value = lead.correo || '';
-  document.getElementById('n-ciudad').value = lead.ciudad || '';
-  document.getElementById('n-estadorep').value = lead.estado_rep || '';
-  document.getElementById('n-notas').value = lead.notas || '';
+  document.getElementById("panel-title").innerHTML = `<i class="ti ti-edit"></i> Editar Lead #${lead.id}`;
   
-  if(lead.proximoseg) {
-    document.getElementById('n-seg').value = lead.proximoseg.substring(0, 16);
+  document.getElementById("n-nombre").value = lead.nombre || "";
+  document.getElementById("n-empresa").value = lead.empresa || "";
+  document.getElementById("n-telefono").value = lead.telefono || "";
+  document.getElementById("n-correo").value = lead.correo || "";
+  document.getElementById("n-ciudad").value = lead.ciudad || "";
+  document.getElementById("n-estado").value = lead.estado_rep || "";
+  
+  document.getElementById("n-fuente").value = lead.fuente || FUENTES[0] || "";
+  document.getElementById("n-producto").value = lead.producto || PRODUCTOS[0] || "";
+  document.getElementById("n-presupuesto").value = lead.presupuesto || PRESUPUESTOS[0] || "";
+  document.getElementById("n-responsable").value = lead.responsable || RESPONSABLES[0] || "";
+  document.getElementById("n-prioridad").value = lead.prioridad || "Media";
+  document.getElementById("n-situacion").value = lead.estado || "Nuevo";
+
+  if (lead.proximoseg) {
+    const localDateTime = new Date(lead.proximoseg).toISOString().slice(0, 16);
+    document.getElementById("n-seg").value = localDateTime;
   } else {
-    document.getElementById('n-seg').value = '';
+    document.getElementById("n-seg").value = "";
   }
 
-  llenarSelectsFormularioLeads();
-  
-  document.getElementById('n-fuente').value = lead.fuente;
-  document.getElementById('n-producto').value = lead.producto;
-  document.getElementById('n-presupuesto').value = lead.presupuesto;
-  document.getElementById('n-responsable').value = lead.responsable;
-  document.getElementById('n-prioridad').value = lead.prioridad;
-  document.getElementById('n-situacion').value = lead.estado || 'Nuevo';
+  document.getElementById("n-notas").value = lead.notas || "";
+  document.getElementById("btn-delete-lead").style.display = "block";
 
-  document.getElementById('btn-delete-lead').style.display = 'block';
+  togglePanel(true);
+}
+
+function openNewLead() {
+  currentLeadId = null;
+  document.getElementById("panel-title").innerHTML = `<i class="ti ti-user-plus"></i> Nuevo Lead`;
+  
+  document.getElementById("n-nombre").value = "";
+  document.getElementById("n-empresa").value = "";
+  document.getElementById("n-telefono").value = "";
+  document.getElementById("n-correo").value = "";
+  document.getElementById("n-ciudad").value = "";
+  document.getElementById("n-estado").value = "";
+  
+  document.getElementById("n-fuente").selectedIndex = 0;
+  document.getElementById("n-producto").selectedIndex = 0;
+  document.getElementById("n-presupuesto").selectedIndex = 0;
+  document.getElementById("n-responsable").selectedIndex = 0;
+  document.getElementById("n-prioridad").value = "Media";
+  document.getElementById("n-situacion").value = "Nuevo";
+  document.getElementById("n-seg").value = "";
+  document.getElementById("n-notes").value = "";
+
+  document.getElementById("btn-delete-lead").style.display = "none";
   togglePanel(true);
 }
 
 async function guardarLeadFormulario() {
-  const nombre = document.getElementById('n-nombre').value.trim();
-  const telefono = document.getElementById('n-telefono').value.trim();
-
-  if (!nombre || !telefono) {
-    alert("⚠️ Los campos Nombre y Teléfono son completamente obligatorios.");
+  const nombre = document.getElementById("n-nombre").value.trim();
+  if (!nombre) {
+    alert("El campo Nombre Completo es obligatorio.");
     return;
   }
 
-  // ACCIÓN CRÍTICA: Solicitar validación de contraseña de seguridad
-  const accion = currentLeadId ? "Modificar y guardar cambios del Lead existente" : "Crear y registrar un nuevo Lead en el sistema";
-  if (!solicitarYValidarContrasena(accion)) return;
-
-  const leadData = {
+  const payload = {
     nombre: nombre,
-    empresa: document.getElementById('n-empresa').value.trim(),
-    telefono: telefono,
-    correo: document.getElementById('n-correo').value.trim(),
-    ciudad: document.getElementById('n-ciudad').value.trim(),
-    estado_rep: document.getElementById('n-estadorep').value.trim(),
-    fuente: document.getElementById('n-fuente').value,
-    producto: document.getElementById('n-producto').value,
-    presupuesto: document.getElementById('n-presupuesto').value,
-    responsable: document.getElementById('n-responsable').value,
-    prioridad: document.getElementById('n-prioridad').value,
-    estado: document.getElementById('n-situacion').value,
-    proximoseg: document.getElementById('n-seg').value || null,
-    notas: document.getElementById('n-notas').value.trim()
+    empresa: document.getElementById("n-empresa").value.trim(),
+    telefono: document.getElementById("n-telefono").value.trim(),
+    correo: document.getElementById("n-correo").value.trim(),
+    ciudad: document.getElementById("n-ciudad").value.trim(),
+    estado_rep: document.getElementById("n-estado").value.trim(),
+    fuente: document.getElementById("n-fuente").value,
+    producto: document.getElementById("n-producto").value,
+    presupuesto: document.getElementById("n-presupuesto").value,
+    responsable: document.getElementById("n-responsable").value,
+    prioridad: document.getElementById("n-prioridad").value,
+    estado: document.getElementById("n-situacion").value,
+    proximoseg: document.getElementById("n-seg").value || null,
+    notas: document.getElementById("n-notas").value.trim()
   };
 
-  try {
+  if (payload.estado === 'Cerrado Ganado') {
     if (currentLeadId) {
-      // Actualizar registro en Supabase
-      const { error } = await _supabase.from('crm_leads').update(leadData).eq('id', currentLeadId);
-      if (error) throw error;
-      notify("✅ Lead modificado y guardado correctamente");
+      const original = LEADS.find(l => l.id === currentLeadId);
+      payload.monto_cerrado = original && original.monto_cerrado ? original.monto_cerrado : dePresupuestoANumero(payload.presupuesto);
     } else {
-      // Crear registro en Supabase
-      const { error } = await _supabase.from('crm_leads').insert([leadData]);
-      if (error) throw error;
-      notify("✅ ¡Nuevo Lead registrado con éxito!");
+      payload.monto_cerrado = dePresupuestoANumero(payload.presupuesto);
     }
+    payload.monto_potencial = 0;
+  } else if (payload.estado === 'Cerrado Perdido' || payload.estado === 'Abandonado') {
+    payload.monto_cerrado = 0;
+    payload.monto_potencial = 0;
+  } else {
+    payload.monto_potencial = dePresupuestoANumero(payload.presupuesto);
+    payload.monto_cerrado = 0;
+  }
 
-    togglePanel(false);
-    await cargarLeadsSupabase();
-    
-    // Forzar redibujado de la pestaña actual en la que esté el usuario
-    const activeTab = document.querySelector('.tab.active');
-    if (activeTab) {
-      if (activeTab.textContent.includes('Dashboard')) renderDashboard();
-      if (activeTab.textContent.includes('Todos los Leads')) renderLeadsTable();
-      if (activeTab.textContent.includes('Seguimiento')) renderSeguimiento();
-      if (activeTab.textContent.includes('Reportes')) renderReportes();
+  if (supabaseClient) {
+    try {
+      if (currentLeadId) {
+        const { error } = await supabaseClient.from('crm_leads').update(payload).eq('id', currentLeadId);
+        if (error) throw error;
+        showToast("¡Lead actualizado con éxito!");
+      } else {
+        const { error } = await supabaseClient.from('crm_leads').insert([payload]);
+        if (error) throw error;
+        showToast("¡Nuevo lead creado con éxito!");
+      }
+      togglePanel(false);
+      await fetchLeadsDesdeSupabase();
+    } catch (e) {
+      showToast("Error al guardar: " + e.message);
     }
-
-  } catch (err) {
-    console.error("Error al guardar en Supabase:", err);
-    alert("❌ Error interno al guardar los datos en Supabase.");
   }
 }
 
 async function eliminarLeadActual() {
   if (!currentLeadId) return;
+  if (!confirm("¿Estás completamente seguro de que deseas eliminar este lead del sistema de forma permanente?")) return;
   
-  if (!solicitarYValidarContrasena("Eliminar permanentemente este Lead del CRM")) return;
-
-  try {
-    const { error } = await _supabase.from('crm_leads').delete().eq('id', currentLeadId);
-    if (error) throw error;
-
-    notify("🗑 Lead eliminado permanentemente.");
-    togglePanel(false);
-    await cargarLeadsSupabase();
-    
-    const activeTab = document.querySelector('.tab.active');
-    if (activeTab) {
-      if (activeTab.textContent.includes('Dashboard')) renderDashboard();
-      if (activeTab.textContent.includes('Todos los Leads')) renderLeadsTable();
-      if (activeTab.textContent.includes('Seguimiento')) renderSeguimiento();
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('crm_leads').delete().eq('id', currentLeadId);
+      if (error) throw error;
+      showToast("Lead eliminado permanentemente.");
+      togglePanel(false);
+      await fetchLeadsDesdeSupabase();
+    } catch (e) {
+      showToast("Error al eliminar: " + e.message);
     }
-  } catch (err) {
-    console.error(err);
-    alert("❌ No se pudo eliminar el registro.");
   }
 }
 
-// ─── RENDERIZADO DEL DASHBOARD (CONSERVA TU MAQUETACIÓN EXACTA) ─────────────
-function renderDashboard() {
-  const container = document.getElementById('tab-dashboard');
-  if(!container) return;
-
-  // Estadísticas operativas rápidas
-  const total = LEADS.length;
-  const ganados = LEADS.filter(l => l.estado === 'Cerrado Ganado').length;
-  const perdidos = LEADS.filter(l => l.estado === 'Cerrado Perdido').length;
-  const enProceso = total - ganados - perdidos;
-
-  container.innerHTML = `
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-val">${total}</div>
-        <div class="metric-label">Leads Totales</div>
-      </div>
-      <div class="metric-card" style="border-left: 4px solid #1D9E75;">
-        <div class="metric-val">${enProceso}</div>
-        <div class="metric-label">En Negociación / Activos</div>
-      </div>
-      <div class="metric-card" style="border-left: 4px solid #2e7d32;">
-        <div class="metric-val">${ganados}</div>
-        <div class="metric-label">Ventas Exitosas</div>
-      </div>
-      <div class="metric-card" style="border-left: 4px solid #c62828;">
-        <div class="metric-val">${perdidos}</div>
-        <div class="metric-label">Leads Perdidos</div>
-      </div>
-    </div>
-
-    <div style="margin-top:24px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-      <h3 style="margin-bottom:16px; font-size:15px; font-weight:600;"><i class="ti ti-alert-circle"></i> Leads Recientes Añadidos</h3>
-      <div style="overflow-x:auto;">
-        <table class="leads-table">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Fuente</th>
-              <th>Producto de Interés</th>
-              <th>Responsable</th>
-              <th>Prioridad</th>
-              <th>Estado</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${LEADS.slice(0, 5).map(l => `
-              <tr>
-                <td><strong>${l.nombre}</strong><br><small style="color:var(--text2)">${l.telefono}</small></td>
-                <td><span class="badge">${l.fuente}</span></td>
-                <td>${l.producto}</td>
-                <td><small>${l.responsable}</small></td>
-                <td><span class="prio-${l.prioridad ? l.prioridad.toLowerCase() : 'baja'}">${l.prioridad || 'Baja'}</span></td>
-                <td><span class="badge" style="background:var(--bg3); color:var(--text);">${l.estado || 'Nuevo'}</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px" onclick="editLead(${l.id})"><i class="ti ti-edit"></i> Ver</button></td>
-              </tr>
-            `).join('')}
-            ${LEADS.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:20px;">No hay leads registrados aún.</td></tr>' : ''}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+function dePresupuestoANumero(txt) {
+  if (!txt) return 0;
+  if (txt.includes('<')) return 2500;
+  if (txt.includes('>')) return 60000;
+  const match = txt.replace(/[^0-9\-]/g, '').split('-');
+  if (match.length === 2) {
+    return Math.round((Number(match[0]) + Number(match[1])) / 2);
+  }
+  return Number(match[0]) || 0;
 }
 
-// ─── PESTAÑA DE TODOS LOS LEADS ────────────────────────────────────────────────
-function renderLeadsTable() {
-  const container = document.getElementById('tab-leads');
-  if(!container) return;
-
-  container.innerHTML = `
-    <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 style="font-size:15px; font-weight:600;"><i class="ti ti-list"></i> Base de Datos General</h3>
-        <span style="color:var(--text2); font-size:13px;">Total: ${LEADS.length} registros</span>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="leads-table">
-          <thead>
-            <tr>
-              <th>Nombre Completo</th>
-              <th>Ubicación</th>
-              <th>Fuente</th>
-              <th>Producto</th>
-              <th>Presupuesto</th>
-              <th>Responsable</th>
-              <th>Estado Pipeline</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${LEADS.map(l => `
-              <tr>
-                <td><strong>${l.nombre}</strong><br><small style="color:var(--text2)">${l.telefono} | ${l.correo || 'Sin correo'}</small></td>
-                <td><small>${l.ciudad || ''}, ${l.estado_rep || ''}</small></td>
-                <td><span class="badge">${l.fuente}</span></td>
-                <td>${l.producto}</td>
-                <td><small>${l.presupuesto}</small></td>
-                <td><small>${l.responsable}</small></td>
-                <td><span class="badge" style="background:var(--green); color:#fff;">${l.estado || 'Nuevo'}</span></td>
-                <td><button class="btn btn-primary" style="padding:4px 8px; font-size:12px" onclick="editLead(${l.id})"><i class="ti ti-edit"></i> Editar</button></td>
-              </tr>
-            `).join('')}
-            ${LEADS.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Ningún lead registrado en el sistema.</td></tr>' : ''}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+// TOAST NOTIFICACIONES
+function showToast(msg) {
+  const t = document.getElementById("notif-toast");
+  if (!t) return;
+  t.innerText = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3500);
 }
 
-// ─── PESTAÑA DE SEGUIMIENTO (ORGANIZADO) ───────────────────────────────────────
-function renderSeguimiento() {
-  const container = document.getElementById('tab-seguimiento');
-  if(!container) return;
-
+// ALERTAS DE DIAS DE HOY
+function evaluarRecordatoriosHoy(leads) {
   const hoyStr = new Date().toLocaleDateString('es-MX');
-
-  const pendientes = LEADS.filter(l => {
-    if(!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
-    const f = new Date(l.proximoseg);
-    return f.toLocaleDateString('es-MX') === hoyStr;
-  });
-
-  const futuros = LEADS.filter(l => {
-    if(!l.proximoseg || l.estado === 'Cerrado Ganado' || l.estado === 'Cerrado Perdido' || l.estado === 'Abandonado') return false;
-    const f = new Date(l.proximoseg);
-    return f.getTime() > new Date().getTime() && f.toLocaleDateString('es-MX') !== hoyStr;
-  });
-
-  container.innerHTML = `
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-      
-      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-        <div class="seg-section-title">
-          <i class="ti ti-bell-ringing" style="color:#d32f2f"></i>
-          <span><b>Seguimientos para el Día de Hoy</b> (${pendientes.length})</span>
-        </div>
-        ${pendientes.map(l => `
-          <div style="background:var(--bg2); padding:12px; border-radius:var(--radius); margin-bottom:10px; border-left:4px solid #d32f2f;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-              <div>
-                <strong>${l.nombre}</strong><br>
-                <small style="color:var(--text2)">📞 ${l.telefono} | 👤 ${l.responsable}</small>
-              </div>
-              <button class="btn btn-secondary" style="padding:2px 6px; font-size:12px" onclick="editLead(${l.id})">Atender</button>
-            </div>
-            <div style="margin-top:6px; font-size:12px; color:#c62828;">
-              <i class="ti ti-clock"></i> Hora: ${new Date(l.proximoseg).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'})}
-            </div>
-          </div>
-        `).join('')}
-        ${pendientes.length === 0 ? '<div class="empty">🎉 Al corriente. No tienes seguimientos agendados para hoy.</div>' : ''}
-      </div>
-
-      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-        <div class="seg-section-title">
-          <i class="ti ti-calendar" style="color:var(--green)"></i>
-          <span><b>Próximos Seguimientos Planificados</b> (${futuros.length})</span>
-        </div>
-        ${futuros.map(l => `
-          <div style="background:var(--bg2); padding:12px; border-radius:var(--radius); margin-bottom:10px; border-left:4px solid var(--green);">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-              <div>
-                <strong>${l.nombre}</strong><br>
-                <small style="color:var(--text2)">👤 ${l.responsable} | 📦 ${l.producto}</small>
-              </div>
-              <button class="btn btn-secondary" style="padding:2px 6px; font-size:12px" onclick="editLead(${l.id})">Ver</button>
-            </div>
-            <div style="margin-top:6px; font-size:12px; color:var(--text2)">
-              <i class="ti ti-calendar-event"></i> Fecha: ${new Date(l.proximoseg).toLocaleString('es-MX', {dateStyle:'short', timeStyle:'short'})}
-            </div>
-          </div>
-        `).join('')}
-        ${futuros.length === 0 ? '<div class="empty">No hay seguimientos agendados para días posteriores.</div>' : ''}
-      </div>
-
-    </div>
-  `;
-}
-
-// ─── PESTAÑA DE REPORTES: RESPETANDO TUS GRÁFICAS DE BARRAS HORIZONTALES ─────
-function renderReportes() {
-  const container = document.getElementById('tab-reportes');
-  if(!container) return;
-
-  // 1. Agrupación estricta por Fuente
-  const conteoFuentes = {};
-  FUENTES.forEach(f => conteoFuentes[f] = 0);
-  LEADS.forEach(l => { if(conteoFuentes[l.fuente] !== undefined) conteoFuentes[l.fuente]++; });
-
-  // 2. Agrupación estricta por Estado del Pipeline
-  const conteoEstados = {};
-  ESTADOS_PIPELINE.forEach(e => conteoEstados[e] = 0);
-  LEADS.forEach(l => { if(conteoEstados[l.estado] !== undefined) conteoEstados[l.estado]++; });
-
-  const maxFuente = Math.max(...Object.values(conteoFuentes), 1);
-  const maxEstado = Math.max(...Object.values(conteoEstados), 1);
-
-  container.innerHTML = `
-    <div style="display:grid; grid-template-columns: 1fr; gap:24px;">
-      
-      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-        <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;"><i class="ti ti-chart-bar"></i> Distribución de Leads por Fuente de Origen</h3>
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          ${Object.entries(conteoFuentes).map(([fuente, cant]) => {
-            const pct = (cant / maxFuente) * 100;
-            return `
-              <div>
-                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                  <span><strong>${fuente}</strong></span>
-                  <span style="color:var(--text2)">${cant} leads</span>
-                </div>
-                <div style="background:var(--bg3); height:20px; border-radius:4px; overflow:hidden; position:relative;">
-                  <div style="background:var(--green); width:${pct}%; height:100%; transition:width 0.4s ease;"></div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-      <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px;">
-        <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;"><i class="ti ti-git-commit"></i> Estado del Pipeline Comercial</h3>
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          ${Object.entries(conteoEstados).map(([estado, cant]) => {
-            const pct = (cant / maxEstado) * 100;
-            return `
-              <div>
-                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                  <span><strong>${estado}</strong></span>
-                  <span style="color:var(--text2)">${cant} leads</span>
-                </div>
-                <div style="background:var(--bg3); height:20px; border-radius:4px; overflow:hidden; position:relative;">
-                  <div style="background:var(--green-dk); width:${pct}%; height:100%; transition:width 0.4s ease;"></div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-    </div>
-  `;
-}
-
-// ─── PESTAÑA DE CONFIGURACIÓN (CAJAS Y ELEMENTOS VINCULADOS AL 100%) ──────────
-function renderConfiguracionTab() {
-  const container = document.getElementById('tab-config');
-  if(!container) return;
-
-  container.innerHTML = `
-    <div class="config-container">
-      
-      <div class="config-box">
-        <h3><i class="ti ti-key"></i> Actualizar Contraseña del Sistema</h3>
-        <div style="display:flex; flex-direction:column; gap:10px; max-width:400px; margin-top:10px;">
-          <div class="form-group">
-            <label>Nueva Contraseña</label>
-            <input type="password" id="cfg-new-pass" placeholder="Mínimo 6 caracteres">
-          </div>
-          <button class="btn btn-primary" style="width:fit-content" onclick="actualizarContrasenaMaster()">Actualizar Contraseña</button>
-        </div>
-      </div>
-
-      <div class="config-box">
-        <h3><i class="ti ti-user-plus"></i> Añadir Nueva Cuenta de Administrador</h3>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:500px; margin-top:10px;">
-          <div class="form-group"><label>Usuario</label><input type="text" id="cfg-new-user" placeholder="Ej. Ventas2"></div>
-          <div class="form-group"><label>Contraseña</label><input type="password" id="cfg-new-user-pass" placeholder="••••••••"></div>
-        </div>
-        <button class="btn btn-primary" style="margin-top:10px;" onclick="agregarCuentaAdminAdicional()">Añadir Cuenta</button>
-        
-        <div style="margin-top:16px;">
-          <strong style="font-size:12px; color:var(--text2);">Cuentas Adicionales Vigentes:</strong>
-          <ul style="margin-top:6px; font-size:13px; padding-left:20px; color:var(--text);">
-            ${ADMINS.map((a, idx) => `<li>👤 <b>${a.usuario}</b> <button class="btn btn-danger" style="padding:2px 6px; font-size:11px; margin-left:8px;" onclick="eliminarCuentaAdmin(${a.id}, '${a.usuario}')">Eliminar</button></li>`).join('')}
-            ${ADMINS.length === 0 ? '<li style="color:var(--text3); list-style:none; padding-left:0;">No hay cuentas secundarias agregadas.</li>' : ''}
-          </ul>
-        </div>
-      </div>
-
-      <div class="config-box">
-        <h3><i class="ti ti-forms"></i> Fuentes de Origen</h3>
-        <div class="config-tags-wrapper">
-          ${FUENTES.map(f => `<span class="config-tag">${f}</span>`).join('')}
-        </div>
-        <div style="display:flex; gap:8px; max-width:400px;">
-          <input type="text" id="add-fuente" class="form-group" style="padding:6px; margin:0;" placeholder="Nueva fuente...">
-          <button class="btn btn-primary" onclick="agregarElementoConfig('fuente', 'add-fuente')">Añadir</button>
-        </div>
-      </div>
-
-      <div class="config-box">
-        <h3><i class="ti ti-package"></i> Productos de Interés</h3>
-        <div class="config-tags-wrapper">
-          ${PRODUCTOS.map(p => `<span class="config-tag">${p}</span>`).join('')}
-        </div>
-        <div style="display:flex; gap:8px; max-width:400px;">
-          <input type="text" id="add-producto" class="form-group" style="padding:6px; margin:0;" placeholder="Nuevo producto...">
-          <button class="btn btn-primary" onclick="agregarElementoConfig('producto', 'add-producto')">Añadir</button>
-        </div>
-      </div>
-
-      <div class="config-box">
-        <h3><i class="ti ti-coin"></i> Rangos de Presupuesto Estimado</h3>
-        <div class="config-tags-wrapper">
-          ${PRESUPUESTOS.map(pr => `<span class="config-tag">${pr}</span>`).join('')}
-        </div>
-        <div style="display:flex; gap:8px; max-width:400px;">
-          <input type="text" id="add-presupuesto" class="form-group" style="padding:6px; margin:0;" placeholder="Ej. $5,000 - $10,000">
-          <button class="btn btn-primary" onclick="agregarElementoConfig('presupuesto', 'add-presupuesto')">Añadir</button>
-        </div>
-      </div>
-
-      <div class="config-box">
-        <h3><i class="ti ti-git-fork"></i> Estados del Pipeline Comercial</h3>
-        <div class="config-tags-wrapper">
-          ${ESTADOS_PIPELINE.map(e => `<span class="config-tag">${e}</span>`).join('')}
-        </div>
-        <div style="display:flex; gap:8px; max-width:400px;">
-          <input type="text" id="add-estado" class="form-group" style="padding:6px; margin:0;" placeholder="Nuevo estado de flujo...">
-          <button class="btn btn-primary" onclick="agregarElementoConfig('estado', 'add-estado')">Añadir</button>
-        </div>
-      </div>
-
-    </div>
-  `;
-}
-
-// ─── ACCIONES DE CONFIGURACIÓN CON VALIDACIÓN DE CONTRASEÑA EN TIEMPO REAL ───
-async function actualizarContrasenaMaster() {
-  const newPass = document.getElementById('cfg-new-pass').value;
-  if (!newPass || newPass.length < 6) {
-    alert("⚠️ La nueva contraseña debe tener como mínimo 6 caracteres válidos.");
-    return;
-  }
-
-  // Validar con la contraseña anterior antes de sobrescribir
-  if (!solicitarYValidarContrasena("Actualizar la contraseña maestra del sistema")) return;
-
-  try {
-    localStorage.setItem('crm_current_pass', newPass);
-    notify("✅ Contraseña del sistema actualizada correctamente");
-    document.getElementById('cfg-new-pass').value = '';
-    renderConfiguracionTab();
-  } catch(e) {
-    alert("❌ Error al actualizar la contraseña local.");
-  }
-}
-
-async function agregarCuentaAdminAdicional() {
-  const user = document.getElementById('cfg-new-user').value.trim();
-  const pass = document.getElementById('cfg-new-user-pass').value;
-
-  if (!user || !pass) {
-    alert("⚠️ Debes rellenar los campos de Usuario y Contraseña.");
-    return;
-  }
-
-  if (!solicitarYValidarContrasena(`Crear cuenta de administrador para "${user}"`)) return;
-
-  try {
-    const { error } = await _supabase.from('crm_usuarios_admin').insert([{ usuario: user, contrasena: pass }]);
-    if (error) throw error;
-
-    notify(`✅ Cuenta secundaria "${user}" añadida con éxito.`);
-    document.getElementById('cfg-new-user').value = '';
-    document.getElementById('cfg-new-user-pass').value = '';
-    
-    // Recargar datos desde Supabase
-    const { data } = await _supabase.from('crm_usuarios_admin').select('*');
-    if(data) ADMINS = data;
-
-    renderConfiguracionTab();
-  } catch (err) {
-    console.error(err);
-    alert("❌ Error al insertar el usuario adicional en Supabase.");
-  }
-}
-
-async function eliminarCuentaAdmin(id, usuario) {
-  if (!solicitarYValidarContrasena(`Eliminar permanentemente los accesos de "${usuario}"`)) return;
-
-  try {
-    const { error } = await _supabase.from('crm_usuarios_admin').delete().eq('id', id);
-    if (error) throw error;
-
-    notify("🗑 Administrador secundario eliminado.");
-    
-    // Recargar lista
-    const { data } = await _supabase.from('crm_usuarios_admin').select('*');
-    if(data) ADMINS = data;
-
-    renderConfiguracionTab();
-  } catch (err) {
-    console.error(err);
-    alert("❌ No se pudo eliminar la cuenta secundaria.");
-  }
-}
-
-async function agregarElementoConfig(tipo, idInput) {
-  const input = document.getElementById(idInput);
-  if (!input) return;
-  const valor = input.value.trim();
-
-  if (!valor) {
-    alert("⚠️ El valor no puede estar vacío.");
-    return;
-  }
-
-  if (!solicitarYValidarContrasena(`Añadir "${valor}" a la lista de opciones de ${tipo}`)) return;
-
-  try {
-    const { error } = await _supabase.from('crm_configuraciones').insert([{ tipo: tipo, valor: valor }]);
-    if (error) throw error;
-
-    notify(`✅ "${valor}" añadido correctamente.`);
-    input.value = '';
-
-    // Actualizar e integrar en el array correspondiente local en caliente
-    if (tipo === 'fuente') FUENTES.push(valor);
-    if (tipo === 'producto') PRODUCTOS.push(valor);
-    if (tipo === 'presupuesto') PRESUPUESTOS.push(valor);
-    if (tipo === 'estado') ESTADOS_PIPELINE.push(valor);
-
-    renderConfiguracionTab();
-    llenarSelectsFormularioLeads();
-  } catch (err) {
-    console.error(err);
-    alert("❌ Error al guardar la nueva configuración en Supabase.");
-  }
-}
-
-// ─── UTILIDADES OPERATIVAS Y VENTANAS FLOTANTES ────────────────────────────────
-function notify(msg) {
-  const notif = document.getElementById('notification');
-  if(!notif) return;
-  notif.textContent = msg;
-  notif.classList.add('show');
-  setTimeout(() => { notif.classList.remove('show'); }, 3500);
-}
-
-function verifySeguimientosHoy(leads) {
-  const hoyStr = new Date().toLocaleDateString('es-MX');
+  
   const hoyLeads = leads ? leads.filter(l => {
     if (!l.proximoseg) return false;
     const f = new Date(l.proximoseg);
@@ -790,11 +736,12 @@ function verifySeguimientosHoy(leads) {
   }
 }
 
+// EXPORTAR A CSV
 function exportCSV() {
   if (LEADS.length === 0) return;
-  let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\\n";
+  let csv = "ID,Nombre,Empresa,Telefono,Correo,Ciudad,EstadoRep,Fuente,Producto,Presupuesto,Responsable,Prioridad,EstadoPipeline,ProximoSeg\n";
   LEADS.forEach(l => {
-    csv += `\"${l.id}\",\"${l.nombre}\",\"${l.empresa || ''}\",\"${l.telefono || ''}\",\"${l.correo || ''}\",\"${l.ciudad || ''}\",\"${l.estado_rep || ''}\",\"${l.fuente}\",\"${l.producto}\",\"${l.presupuesto}\",\"${l.responsable}\",\"${l.prioridad}\",\"${l.estado || 'Nuevo'}\",\"${l.proximoseg || ''}\"\\n`;
+    csv += `"${l.id}","${l.nombre}","${l.empresa || ''}","${l.telefono || ''}","${l.correo || ''}","${l.ciudad || ''}","${l.estado_rep || ''}","${l.fuente}","${l.producto}","${l.presupuesto}","${l.responsable}","${l.prioridad}","${l.estado || 'Nuevo'}","${l.proximoseg || ''}"\n`;
   });
   const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement("a");
@@ -805,37 +752,23 @@ function exportCSV() {
   document.body.removeChild(link);
 }
 
+// FUNCIÓN PARA MOSTRAR / OCULTAR EL PANEL LATERAL FLOTANTE
 function togglePanel(show) {
   const overlay = document.getElementById('overlay');
   const panel = document.getElementById('panel');
   if (overlay && panel) {
     if (show) {
-      overlay.style.display = 'block';
-      setTimeout(() => {
-        overlay.classList.add('active');
-        panel.classList.add('active');
-      }, 10);
+      overlay.classList.add('active');
+      panel.classList.add('active');
     } else {
       overlay.classList.remove('active');
       panel.classList.remove('active');
-      setTimeout(() => { overlay.style.display = 'none'; }, 300);
     }
   }
 }
 
 function closePanel(e) {
-  if (e && e.target.id === 'overlay') {
+  if (!e || e.target.id === 'overlay') {
     togglePanel(false);
   }
 }
-
-// ─── DETONACIÓN AL CARGAR LA VENTANA VIGENTE ──────────────────────────────────
-window.onload = function() {
-  fetchConfiguraciones().then(() => {
-    if (sessionStorage.getItem('crm_logged_in') === 'true') {
-      document.getElementById('login-container').style.display = 'none';
-      document.getElementById('main-layout').style.display = 'block';
-      inicializarCRM();
-    }
-  });
-};
